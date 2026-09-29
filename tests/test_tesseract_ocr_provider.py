@@ -123,7 +123,7 @@ class TesseractFailureMappingTests(unittest.TestCase):
             timeout_seconds=30,
             model_id="test-model",
             config_version="test-config",
-            tessdata_dir=r"E:\\models\\tessdata_fast",
+            tessdata_dir=r"E:\models\tessdata_fast",
         )
         provider = TesseractOcrProvider(config_reader=None, settings=settings)
         tsv = (
@@ -151,7 +151,7 @@ class TesseractFailureMappingTests(unittest.TestCase):
         self.assertEqual(version, "tesseract 5.4.0")
         command = run.call_args_list[0].args[0]
         self.assertIn("--tessdata-dir", command)
-        self.assertIn(r"E:\\models\\tessdata_fast", command)
+        self.assertIn(r"E:\models\tessdata_fast", command)
         self.assertEqual(command[-2:], ["-c", "tessedit_create_tsv=1"])
         self.assertNotEqual(command[-1], "tsv")
 
