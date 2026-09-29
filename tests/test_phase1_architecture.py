@@ -39,12 +39,11 @@ class Phase1ArchitectureTests(unittest.TestCase):
         )
         self.assertEqual(violating, [])
 
-    def test_phase1_does_not_create_future_runtime_layers(self):
-        src = REPOSITORY_ROOT / "src"
-        self.assertFalse((src / "application").exists())
-        self.assertFalse((src / "infrastructure").exists())
-        self.assertFalse((src / "host").exists())
-        self.assertFalse((src / "core" / "services").exists())
+    def test_phase1_contract_remains_free_of_phase3_runtime_types(self):
+        contract_text = CONTRACTS_FILE.read_text(encoding="utf-8")
+        self.assertNotIn("CanonicalImage", contract_text)
+        self.assertNotIn("ImageProcessingService", contract_text)
+        self.assertNotIn("RawImageInput", contract_text)
 
 
 if __name__ == "__main__":

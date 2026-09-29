@@ -1,0 +1,10 @@
+profile_analysis:
+  max_images: 50
+  max_image_size_mb: 12
+  max_image_pixels: 40000000
+image:
+  max_dimension: 2048
+  allowed_mime_types:
+    - image/jpeg
+    - image/png
+    - image/webp

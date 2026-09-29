@@ -7,6 +7,16 @@ import unittest
 
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
 EVALUATION_ROOT = REPOSITORY_ROOT / "evaluation"
+PHASE2_EVALUATION_FILES = (
+    EVALUATION_ROOT / "benchmark.py",
+    EVALUATION_ROOT / "common.py",
+    EVALUATION_ROOT / "contracts.py",
+    EVALUATION_ROOT / "dataset.py",
+    EVALUATION_ROOT / "metrics.py",
+    EVALUATION_ROOT / "predictions.py",
+    EVALUATION_ROOT / "reporting.py",
+    EVALUATION_ROOT / "validate_dataset.py",
+)
 
 
 class Phase2ArchitectureTests(unittest.TestCase):
@@ -18,7 +28,7 @@ class Phase2ArchitectureTests(unittest.TestCase):
         self.assertTrue(hasattr(metrics, "character_error_rate"))
         self.assertTrue(hasattr(benchmark, "run_benchmark"))
 
-    def test_evaluation_tooling_has_no_forbidden_runtime_or_ml_imports(self):
+    def test_phase2_evaluation_tooling_has_no_forbidden_runtime_or_ml_imports(self):
         forbidden_prefixes = (
             "fastapi",
             "pydantic",
@@ -34,7 +44,7 @@ class Phase2ArchitectureTests(unittest.TestCase):
             "src.host",
         )
         violations = []
-        for path in sorted(EVALUATION_ROOT.glob("*.py")):
+        for path in PHASE2_EVALUATION_FILES:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 imported = []
@@ -50,14 +60,7 @@ class Phase2ArchitectureTests(unittest.TestCase):
                         violations.append((path.name, name))
         self.assertEqual(violations, [])
 
-    def test_phase2_does_not_create_application_infrastructure_host_or_services(self):
-        src = REPOSITORY_ROOT / "src"
-        self.assertFalse((src / "application").exists())
-        self.assertFalse((src / "infrastructure").exists())
-        self.assertFalse((src / "host").exists())
-        self.assertFalse((src / "core" / "services").exists())
-
-    def test_no_phase3_or_ml_provider_components_exist(self):
+    def test_phase2_files_do_not_gain_phase3_or_ml_provider_components(self):
         forbidden_terms = (
             "CanonicalImage",
             "ImageProcessingService",
@@ -67,8 +70,7 @@ class Phase2ArchitectureTests(unittest.TestCase):
             "LocalVisionProvider",
         )
         production_text = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in sorted(EVALUATION_ROOT.glob("*.py"))
+            path.read_text(encoding="utf-8") for path in PHASE2_EVALUATION_FILES
         )
         for term in forbidden_terms:
             with self.subTest(term=term):
@@ -87,7 +89,7 @@ class Phase2ArchitectureTests(unittest.TestCase):
         violations = []
         production_files = [
             REPOSITORY_ROOT / "src" / "core" / "profile_analysis" / "contracts.py",
-            *sorted(EVALUATION_ROOT.glob("*.py")),
+            *PHASE2_EVALUATION_FILES,
         ]
         for path in production_files:
             for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
