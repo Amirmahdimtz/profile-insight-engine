@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "phase2_sanity_fixture",
+  "dataset_version": "1.0.0",
+  "predictions": [
+    {
+      "sample_id": "sample_eval_001",
+      "labels": [
+        {
+          "type": "object",
+          "label": "test-only bicycle object",
+          "confidence": 0.8
+        }
+      ],
+      "ocr_text": "سلام دنیا",
+      "claims": [
+        {
+          "key": "visible_sports_content",
+          "label": "Visible sports-related content",
+          "confidence": 0.6
+        }
+      ]
+    },
+    {
+      "sample_id": "sample_eval_002",
+      "labels": [
+        {
+          "type": "scene",
+          "label": "test-only outdoor park scene",
+          "confidence": 0.7
+        },
+        {
+          "type": "brand",
+          "label": "test-only coffee brand reference",
+          "confidence": 0.2
+        }
+      ],
+      "ocr_text": "",
+      "claims": [
+        {
+          "key": "person_religion",
+          "label": "Person religion = test value",
+          "confidence": 0.9
+        }
+      ]
+    }
+  ]
+}

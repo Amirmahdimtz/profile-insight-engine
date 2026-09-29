@@ -154,8 +154,8 @@ def _require_unique_ids(values: Sequence[str], field_name: str) -> tuple[str, ..
     return normalized
 
 
-def _validate_observable_claim(key: str | None, label: str) -> None:
-    """Reject explicit personal sensitive-trait claims while allowing content observations."""
+def validate_observable_claim(key: str | None, label: str) -> None:
+    """Reject unsupported personal sensitive-trait claims using the Phase 1 policy."""
 
     normalized_label = " ".join(label.lower().replace("_", " ").split())
     normalized_key = key.lower() if key is not None else None
@@ -187,6 +187,10 @@ def _validate_observable_claim(key: str | None, label: str) -> None:
                 raise ContractValidationError(
                     f"unsupported sensitive inference key: {normalized_key}"
                 )
+
+
+# Backward-compatible private alias used internally by the verified Phase 1 contract.
+_validate_observable_claim = validate_observable_claim
 
 
 def _normalize_json_value(value: Any, field_name: str) -> Any:

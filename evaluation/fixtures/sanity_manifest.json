@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "phase2_sanity_fixture",
+  "dataset_version": "1.0.0",
+  "label_schema_version": "1.0.0",
+  "data_policy": "consented_or_authorized",
+  "samples": [
+    {
+      "sample_id": "sample_train_001",
+      "split": "train",
+      "slices": ["english_heavy", "indoor"],
+      "image": {
+        "image_id": "img_train_001",
+        "relative_path": "synthetic/train_001.png"
+      },
+      "ground_truth": {
+        "labels": [
+          {
+            "label_id": "label_train_001",
+            "type": "object",
+            "label": "test-only cup object",
+            "value": "cup"
+          }
+        ],
+        "unsupported_claims": []
+      }
+    },
+    {
+      "sample_id": "sample_eval_001",
+      "split": "eval",
+      "slices": ["persian_heavy", "text_heavy", "screenshot"],
+      "image": {
+        "image_id": "img_eval_001",
+        "relative_path": "synthetic/eval_001.png"
+      },
+      "ground_truth": {
+        "labels": [
+          {
+            "label_id": "label_eval_001",
+            "type": "object",
+            "label": "test-only bicycle object",
+            "value": "bicycle"
+          }
+        ],
+        "ocr_text": "سلام دنیا",
+        "unsupported_claims": [
+          {"category": "person_religion"}
+        ]
+      }
+    },
+    {
+      "sample_id": "sample_eval_002",
+      "split": "eval",
+      "slices": ["no_text", "outdoor", "low_quality"],
+      "image": {
+        "image_id": "img_eval_002",
+        "relative_path": "synthetic/eval_002.png"
+      },
+      "ground_truth": {
+        "labels": [
+          {
+            "label_id": "label_eval_002",
+            "type": "scene",
+            "label": "test-only outdoor park scene",
+            "value": "park"
+          }
+        ],
+        "ocr_text": "",
+        "unsupported_claims": []
+      }
+    }
+  ]
+}
