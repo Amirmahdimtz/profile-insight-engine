@@ -131,7 +131,7 @@ class TesseractOcrProvider(IOcrProvider):
         ]
         if self._settings.tessdata_dir is not None:
             command.extend(["--tessdata-dir", self._settings.tessdata_dir])
-        command.append("tsv")
+        command.extend(["-c", "tessedit_create_tsv=1"])
         try:
             completed = subprocess.run(
                 command,
