@@ -8,3 +8,13 @@ image:
     - image/jpeg
     - image/png
     - image/webp
+ocr:
+  provider: tesseract
+  executable: tesseract
+  languages:
+    - fas
+    - eng
+  page_segmentation_mode: 1
+  timeout_seconds: 30
+  model_id: tessdata-default-fas-eng
+  config_version: phase4-ocr-v1

@@ -21,6 +21,15 @@ _lock = threading.RLock()
 def _register_provider(provider_type: type[Any]) -> None:
     with _lock:
         _providers[provider_type] = provider_type
+        for base_type in provider_type.__mro__[1:]:
+            if base_type is object or not base_type.__name__.startswith("I"):
+                continue
+            existing = _providers.get(base_type)
+            if existing is not None and existing is not provider_type:
+                raise DependencyResolutionError(
+                    f"multiple providers discovered for interface {base_type.__module__}.{base_type.__qualname__}"
+                )
+            _providers[base_type] = provider_type
 
 
 def inject(cls: type[T]) -> type[T]:
@@ -60,7 +69,7 @@ def inject(cls: type[T]) -> type[T]:
 
 
 def resolve(dependency_type: type[T]) -> T:
-    """Resolve a discovered provider by concrete type."""
+    """Resolve a discovered provider by concrete type or a discovered interface base."""
 
     with _lock:
         provider_type = _providers.get(dependency_type)

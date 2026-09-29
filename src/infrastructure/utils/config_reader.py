@@ -55,6 +55,24 @@ class ConfigReader:
             raise ConfigurationError(f"configuration key '{key}' must be a positive integer")
         return value
 
+    def get_int_in_range(self, key: str, *, minimum: int, maximum: int) -> int:
+        if minimum > maximum:
+            raise ValueError("minimum must be <= maximum")
+        value = self.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum or value > maximum:
+            raise ConfigurationError(
+                f"configuration key '{key}' must be an integer in [{minimum}, {maximum}]"
+            )
+        return value
+
+    def get_non_empty_string(self, key: str) -> str:
+        value = self.get(key)
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ConfigurationError(
+                f"configuration key '{key}' must be a non-empty trimmed string"
+            )
+        return value
+
     def get_non_empty_string_list(self, key: str) -> tuple[str, ...]:
         value = self.get(key)
         if not isinstance(value, list) or not value:
