@@ -115,5 +115,46 @@ class TesseractFailureMappingTests(unittest.TestCase):
                 provider._run_tesseract(Path("canonical.png"))
 
 
+    def test_custom_tessdata_dir_enables_tsv_without_external_config_file(self):
+        settings = TesseractOcrSettings(
+            executable="tesseract",
+            languages=("fas", "eng"),
+            page_segmentation_mode=1,
+            timeout_seconds=30,
+            model_id="test-model",
+            config_version="test-config",
+            tessdata_dir=r"E:\\models\\tessdata_fast",
+        )
+        provider = TesseractOcrProvider(config_reader=None, settings=settings)
+        tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+        )
+        ocr_completed = subprocess.CompletedProcess(
+            args=["tesseract"],
+            returncode=0,
+            stdout=tsv.encode("utf-8"),
+            stderr=b"",
+        )
+        version_completed = subprocess.CompletedProcess(
+            args=["tesseract", "--version"],
+            returncode=0,
+            stdout=b"tesseract 5.4.0\n",
+            stderr=b"",
+        )
+        with patch(
+            "src.infrastructure.providers.ocr.tesseract_ocr_provider.subprocess.run",
+            side_effect=[ocr_completed, version_completed],
+        ) as run:
+            output, version = provider._run_tesseract(Path("canonical.png"))
+
+        self.assertEqual(output, tsv)
+        self.assertEqual(version, "tesseract 5.4.0")
+        command = run.call_args_list[0].args[0]
+        self.assertIn("--tessdata-dir", command)
+        self.assertIn(r"E:\\models\\tessdata_fast", command)
+        self.assertEqual(command[-2:], ["-c", "tessedit_create_tsv=1"])
+        self.assertNotEqual(command[-1], "tsv")
+
+
 if __name__ == "__main__":
     unittest.main()
