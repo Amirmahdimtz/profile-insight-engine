@@ -488,6 +488,28 @@ class _RuntimeResourceMonitor:
             )
 
 
+def _provider_claims(
+    provider_result: object,
+) -> tuple[tuple[str, str], ...]:
+    observations = getattr(
+        provider_result,
+        "observations",
+        (),
+    )
+    claims = [
+        (item.kind.value, item.label)
+        for item in observations
+    ]
+    caption = getattr(
+        provider_result,
+        "caption",
+        None,
+    )
+    if caption is not None:
+        claims.append(("caption", caption.text))
+    return tuple(claims)
+
+
 def _benchmark_label(value: object) -> str:
     if (
         not isinstance(value, str)
@@ -692,6 +714,9 @@ async def run_vision_benchmark_async(
                 item.value: set()
                 for item in _VISUAL_LABEL_TYPES
             }
+            pre_policy_claims: list[
+                tuple[str, str]
+            ] = []
             post_validation_claims: list[
                 tuple[str, str]
             ] = []
@@ -760,14 +785,26 @@ async def run_vision_benchmark_async(
                     ] = []
                     first_result = None
                     try:
-                        for _ in range(iterations):
+                        for iteration_index in range(
+                            iterations
+                        ):
                             started = (
                                 time.perf_counter()
                             )
-                            result = (
-                                await service.extract_async(
+                            provider_result = (
+                                await provider.extract_async(
                                     batch.images[0]
                                 )
+                            )
+                            if iteration_index == 0:
+                                pre_policy_claims.extend(
+                                    _provider_claims(
+                                        provider_result
+                                    )
+                                )
+                            result = service.normalize_result(
+                                batch.images[0],
+                                provider_result,
                             )
                             latencies_ms.append(
                                 (
@@ -970,6 +1007,11 @@ async def run_vision_benchmark_async(
                         if overall is None
                         else overall.f1
                     ),
+                    "unsupported_claim_rate_pre_policy": (
+                        unsupported_claim_rate(
+                            pre_policy_claims
+                        )
+                    ),
                     "unsupported_claim_rate_post_validation": (
                         unsupported_claim_rate(
                             post_validation_claims
@@ -1034,6 +1076,11 @@ async def run_vision_benchmark_async(
                 "provider confidence is model-self-reported "
                 "and uncalibrated; no production threshold "
                 "is selected in Phase 5"
+            ),
+            "unsupported_claim_rate_pre_policy": (
+                "measured on strictly parsed structured "
+                "provider claims before Core policy rejection; "
+                "raw model response text is never retained"
             ),
             "unsupported_claim_rate_post_validation": (
                 "measured on evidence that survived the "

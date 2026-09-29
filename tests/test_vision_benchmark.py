@@ -4,11 +4,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from evaluation.common import DatasetSlice, DatasetSplit, EvaluationLabelType
+from evaluation.metrics import unsupported_claim_rate
 from evaluation.vision_benchmark import (
     _benchmark_label,
     _parse_candidate,
+    _provider_claims,
     audit_visual_label_coverage,
     run_vision_benchmark_async,
+)
+from src.core.profile_analysis.vision_contracts import (
+    VisionEvidenceKind,
+    VisionObservation,
+    VisionProviderResult,
 )
 
 
@@ -52,6 +59,34 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
                 runtime_executable=None,
                 startup_timeout_seconds=None,
             )
+
+    def test_pre_policy_claims_preserve_unsupported_output_for_metric(
+        self,
+    ):
+        result = VisionProviderResult(
+            image_id="img-1",
+            observations=(
+                VisionObservation(
+                    VisionEvidenceKind.TOPIC,
+                    "person religion",
+                    0.9,
+                ),
+            ),
+            caption=None,
+            provider="llama_cpp",
+            provider_version="b123",
+            model_id="candidate",
+            model_version="v1",
+            config_version="phase5-v1",
+            confidence_semantics=(
+                "model_self_reported_uncalibrated"
+            ),
+        )
+        claims = _provider_claims(result)
+        self.assertEqual(
+            unsupported_claim_rate(claims),
+            1.0,
+        )
 
     def test_visual_coverage_reports_missing_label_types(
         self,

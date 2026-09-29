@@ -56,6 +56,15 @@ class EvidenceExtractionService:
         if not isinstance(image, CanonicalImage):
             raise VisionValidationError("image must be a CanonicalImage")
         provider_result = await self._vision_provider.extract_async(image)
+        return self.normalize_result(image, provider_result)
+
+    def normalize_result(
+        self,
+        image: CanonicalImage,
+        provider_result: VisionProviderResult,
+    ) -> VisionExtractionResult:
+        if not isinstance(image, CanonicalImage):
+            raise VisionValidationError("image must be a CanonicalImage")
         if not isinstance(provider_result, VisionProviderResult):
             raise VisionValidationError("vision provider returned an invalid result type")
         if provider_result.image_id != image.image_id:

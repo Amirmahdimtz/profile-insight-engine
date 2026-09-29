@@ -84,7 +84,7 @@ For each candidate it records, where measurable:
 - provider build info;
 - model source spec, local model path, and SHA-256 when the runtime exposes a readable GGUF path;
 - object/scene/activity/topic Precision, Recall and F1 plus overall metrics;
-- unsupported-claim rate on post-validation Evidence and failed/rejected sample count;
+- unsupported-claim rate on strictly parsed pre-policy provider claims, post-validation Evidence, and failed/rejected sample count;
 - p50/p95 per-image latency;
 - model load time;
 - sampled llama.cpp process RAM peak;
@@ -181,7 +181,7 @@ Inspect dataset coverage and reproducibility/resource metrics:
 $Report = Get-Content "$env:PHASE5_REPORT" -Raw | ConvertFrom-Json
 $Report | Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,iterations
 $Report.visual_label_coverage | ConvertTo-Json -Depth 8
-$Report.candidates | Select-Object candidate,hf_model,provider,provider_version,model_sha256,sample_count,failed_sample_count,precision,recall,f1,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,deterministic_rerun | Format-Table -AutoSize
+$Report.candidates | Select-Object candidate,hf_model,provider,provider_version,model_sha256,sample_count,failed_sample_count,precision,recall,f1,unsupported_claim_rate_pre_policy,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,deterministic_rerun | Format-Table -AutoSize
 $Report.candidates | ForEach-Object { $_.per_label_type | ConvertTo-Json -Depth 6 }
 ```
 
@@ -205,7 +205,7 @@ $Report.candidates | ForEach-Object {
 - DI discovery resolves `IVisionProvider` to `LlamaCppVisionProvider` and resolves `EvidenceExtractionService` without manual registration.
 - The benchmark validates the exact Phase 2 dataset fingerprints before inference.
 - Visual-label coverage is reported rather than assumed.
-- Each candidate report contains actual Precision/Recall/F1, rejected/failed sample count, p50/p95 latency, model-load time, reproducibility status, model/runtime traceability, RAM, and VRAM when measurable.
+- Each candidate report contains actual Precision/Recall/F1, pre-policy and post-validation unsupported-claim rates, rejected/failed sample count, p50/p95 latency, model-load time, reproducibility status, model/runtime traceability, RAM, and VRAM when measurable.
 - No candidate is promoted automatically.
 - If required visual label types are missing/insufficient or candidate runs are not reproducible, Phase 5 remains open and the missing authorized human annotations/runtime evidence must be supplied.
 

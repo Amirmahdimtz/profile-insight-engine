@@ -357,7 +357,11 @@ class LlamaCppVisionProvider(IVisionProvider):
             "stream": False,
             "response_format": {
                 "type": "json_schema",
-                "schema": _OUTPUT_SCHEMA,
+                "json_schema": {
+                    "name": "phase5_visual_evidence",
+                    "strict": True,
+                    "schema": _OUTPUT_SCHEMA,
+                },
             },
         }
         request = urllib.request.Request(

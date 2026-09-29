@@ -107,6 +107,47 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
                 }
             )
 
+    def test_request_uses_llama_cpp_json_schema_wrapper(self):
+        provider = LlamaCppVisionProvider(
+            object(),
+            _settings(),
+        )
+        captured = {}
+
+        def capture(request):
+            captured.update(
+                json.loads(
+                    request.data.decode("utf-8")
+                )
+            )
+            return {"choices": []}
+
+        with patch.object(
+            provider,
+            "_urlopen_json",
+            side_effect=capture,
+        ):
+            provider._request_completion(b"png")
+        response_format = captured["response_format"]
+        self.assertEqual(
+            response_format["type"],
+            "json_schema",
+        )
+        self.assertEqual(
+            response_format["json_schema"]["name"],
+            "phase5_visual_evidence",
+        )
+        self.assertTrue(
+            response_format["json_schema"]["strict"]
+        )
+        self.assertEqual(
+            response_format["json_schema"]["schema"],
+            __import__(
+                "src.infrastructure.providers.vision.llama_cpp_vision_provider",
+                fromlist=["_OUTPUT_SCHEMA"],
+            )._OUTPUT_SCHEMA,
+        )
+
     def test_completion_payload_requires_single_json_choice(self):
         with self.assertRaises(VisionProviderError):
             LlamaCppVisionProvider._parse_completion_payload(
