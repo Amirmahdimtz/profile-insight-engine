@@ -94,13 +94,14 @@ class SystemMetrics:
         _expect_keys(
             payload,
             cls.__name__,
-            {"p50_latency_ms", "p95_latency_ms", "ram_mb", "vram_mb"},
+            {"p50_latency_ms", "p95_latency_ms", "ram_mb"},
+            {"vram_mb"},
         )
         return cls(
             p50_latency_ms=payload["p50_latency_ms"],
             p95_latency_ms=payload["p95_latency_ms"],
             ram_mb=payload["ram_mb"],
-            vram_mb=payload["vram_mb"],
+            vram_mb=payload.get("vram_mb"),
         )
 
 
@@ -136,6 +137,7 @@ class ReproducibilityMetadata:
     dataset_id: str
     dataset_version: str
     manifest_fingerprint: str
+    dataset_content_fingerprint: str | None
     evaluator_version: str
     config: BenchmarkConfig
 
@@ -152,6 +154,17 @@ class ReproducibilityMetadata:
                 "repro.manifest_fingerprint must be a lowercase SHA-256 hex digest"
             )
         object.__setattr__(self, "manifest_fingerprint", fingerprint)
+        if self.dataset_content_fingerprint is not None:
+            content_fingerprint = _require_text(
+                self.dataset_content_fingerprint, "repro.dataset_content_fingerprint"
+            )
+            if not re.fullmatch(r"[0-9a-f]{64}", content_fingerprint):
+                raise EvaluationValidationError(
+                    "repro.dataset_content_fingerprint must be a lowercase SHA-256 hex digest"
+                )
+            object.__setattr__(
+                self, "dataset_content_fingerprint", content_fingerprint
+            )
         object.__setattr__(
             self,
             "evaluator_version",
@@ -174,6 +187,7 @@ class ReproducibilityMetadata:
                 "dataset_id",
                 "dataset_version",
                 "manifest_fingerprint",
+                "dataset_content_fingerprint",
                 "evaluator_version",
                 "config",
             },
@@ -182,6 +196,7 @@ class ReproducibilityMetadata:
             dataset_id=payload["dataset_id"],
             dataset_version=payload["dataset_version"],
             manifest_fingerprint=payload["manifest_fingerprint"],
+            dataset_content_fingerprint=payload["dataset_content_fingerprint"],
             evaluator_version=payload["evaluator_version"],
             config=BenchmarkConfig.from_dict(payload["config"]),
         )

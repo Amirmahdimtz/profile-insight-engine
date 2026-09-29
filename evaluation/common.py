@@ -19,10 +19,10 @@ from src.core.profile_analysis.contracts import (
 
 
 DATASET_SCHEMA_VERSION = "1.0.0"
-LABEL_SCHEMA_VERSION = "1.0.0"
-PREDICTION_SCHEMA_VERSION = "1.0.0"
-BENCHMARK_REPORT_SCHEMA_VERSION = "1.0.0"
-EVALUATOR_VERSION = "phase2-evaluator-1.0.0"
+LABEL_SCHEMA_VERSION = "1.1.0"
+PREDICTION_SCHEMA_VERSION = "1.1.0"
+BENCHMARK_REPORT_SCHEMA_VERSION = "1.1.0"
+EVALUATOR_VERSION = "phase2-evaluator-1.1.0"
 _VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -56,6 +56,7 @@ class EvaluationLabelType(str, Enum):
     OCR_TEXT = EvidenceType.OCR_TEXT.value
     ACTIVITY = EvidenceType.ACTIVITY.value
     ENVIRONMENT = EvidenceType.ENVIRONMENT.value
+    TOPIC = EvidenceType.TOPIC.value
     VISIBLE_INTEREST = ThemeType.VISIBLE_INTEREST.value
     BRAND = EvidenceType.BRAND.value
     TEAM = EvidenceType.TEAM.value

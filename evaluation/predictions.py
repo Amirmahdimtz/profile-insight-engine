@@ -6,8 +6,9 @@ from typing import Any
 
 from evaluation.common import (
     PREDICTION_SCHEMA_VERSION, EvaluationLabelType, EvaluationValidationError,
-    _expect_keys, _expect_mapping, _parse_enum, _require_id, _require_probability,
-    _require_sequence, _require_text, _require_version, _validate_observable_label, deterministic_json,
+    _expect_keys, _expect_mapping, _normalize_json_value, _parse_enum, _require_id,
+    _require_probability, _require_sequence, _require_text, _require_version,
+    _validate_observable_label, deterministic_json,
 )
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class PredictedEvidenceLabel:
     type: EvaluationLabelType
     label: str
     confidence: float
+    value: Any = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.type, EvaluationLabelType):
@@ -22,6 +24,7 @@ class PredictedEvidenceLabel:
                 "prediction.label.type must be an EvaluationLabelType"
             )
         object.__setattr__(self, "label", _validate_observable_label(self.label))
+        object.__setattr__(self, "value", _normalize_json_value(self.value, "prediction.label.value"))
         object.__setattr__(
             self,
             "confidence",
@@ -29,17 +32,18 @@ class PredictedEvidenceLabel:
         )
 
     @property
-    def identity(self) -> tuple[str, str]:
-        return self.type.value, self.label
+    def identity(self) -> tuple[str, str, str]:
+        return self.type.value, self.label, deterministic_json(self.value)
 
     @classmethod
     def from_dict(cls, payload: Any) -> "PredictedEvidenceLabel":
         payload = _expect_mapping(payload, cls.__name__)
-        _expect_keys(payload, cls.__name__, {"type", "label", "confidence"})
+        _expect_keys(payload, cls.__name__, {"type", "label", "confidence"}, {"value"})
         return cls(
             type=_parse_enum(EvaluationLabelType, payload["type"], "prediction.label.type"),
             label=payload["label"],
             confidence=payload["confidence"],
+            value=payload.get("value"),
         )
 
 

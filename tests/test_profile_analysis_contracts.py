@@ -274,5 +274,37 @@ class ProfileAnalysisContractTests(unittest.TestCase):
             )
 
 
+    def test_persian_sensitive_inferences_are_rejected_without_blocking_observable_content(self):
+        blocked_labels = (
+            "مذهب شخص = اسلام",
+            "گرایش سیاسی فرد = نمونه",
+            "سلامت روان کاربر = نمونه",
+            "هوش صاحب پروفایل = بالا",
+            "نسبت خانوادگی فرد = نمونه",
+        )
+        for label in blocked_labels:
+            with self.subTest(label=label), self.assertRaises(ContractValidationError):
+                Evidence(
+                    id="ev_1",
+                    image_id="img_1",
+                    type=EvidenceType.OTHER_OBSERVABLE,
+                    label=label,
+                    value=None,
+                    confidence=0.8,
+                    source="normalized_source",
+                )
+
+        allowed = Evidence(
+            id="ev_religious_content_fa",
+            image_id="img_1",
+            type=EvidenceType.RELIGIOUS_CONTENT,
+            label="محتوای مذهبی قابل مشاهده",
+            value="نماد مذهبی",
+            confidence=0.8,
+            source="normalized_visual_evidence",
+        )
+        self.assertEqual(allowed.type, EvidenceType.RELIGIOUS_CONTENT)
+
+
 if __name__ == "__main__":
     unittest.main()

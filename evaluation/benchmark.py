@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Sequence
 
@@ -16,6 +17,7 @@ from evaluation.contracts import (
     MetricResult,
     PredictionSet,
     ReproducibilityMetadata,
+    SystemMetrics,
 )
 from evaluation.metrics import (
     character_error_rate,
@@ -34,12 +36,22 @@ def load_predictions(path: str | Path) -> PredictionSet:
     return PredictionSet.from_json(Path(path).read_text(encoding="utf-8"))
 
 
+def load_system_metrics(path: str | Path) -> SystemMetrics:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise EvaluationValidationError("system metrics contain invalid JSON") from exc
+    return SystemMetrics.from_dict(payload)
+
+
 def run_benchmark(
     manifest: EvaluationDatasetManifest,
     predictions: PredictionSet,
     *,
     config: BenchmarkConfig | None = None,
     report_kind: BenchmarkReportKind = BenchmarkReportKind.BENCHMARK,
+    dataset_content_fingerprint: str | None = None,
+    system_metrics: SystemMetrics | None = None,
 ) -> BenchmarkReport:
     if not isinstance(manifest, EvaluationDatasetManifest):
         raise EvaluationValidationError("manifest must be an EvaluationDatasetManifest")
@@ -50,6 +62,8 @@ def run_benchmark(
         raise EvaluationValidationError("config must be a BenchmarkConfig")
     if not isinstance(report_kind, BenchmarkReportKind):
         raise EvaluationValidationError("report_kind must be a BenchmarkReportKind")
+    if system_metrics is not None and not isinstance(system_metrics, SystemMetrics):
+        raise EvaluationValidationError("system_metrics must be SystemMetrics or null")
 
     if predictions.dataset_id != manifest.dataset_id:
         raise EvaluationValidationError("prediction dataset_id does not match manifest")
@@ -75,8 +89,8 @@ def run_benchmark(
         prediction.sample_id: prediction for prediction in predictions.predictions
     }
 
-    expected_label_instances: set[tuple[str, str, str]] = set()
-    predicted_label_instances: set[tuple[str, str, str]] = set()
+    expected_label_instances: set[tuple[str, str, str, str]] = set()
+    predicted_label_instances: set[tuple[str, str, str, str]] = set()
     calibration_observations: list[tuple[float, bool]] = []
     cer_values: list[float] = []
     wer_values: list[float] = []
@@ -85,7 +99,7 @@ def run_benchmark(
     for sample in eval_samples:
         prediction = prediction_by_sample[sample.sample_id]
         expected_identities = {
-            (label.type.value, label.label)
+            label.identity
             for label in sample.ground_truth.labels
             if label.type is not EvaluationLabelType.OCR_TEXT
         }
@@ -96,12 +110,12 @@ def run_benchmark(
         }
 
         expected_label_instances.update(
-            (sample.sample_id, label_type, label)
-            for label_type, label in expected_identities
+            (sample.sample_id, label_type, label, value)
+            for label_type, label, value in expected_identities
         )
         predicted_label_instances.update(
-            (sample.sample_id, label_type, label)
-            for label_type, label in predicted_identities
+            (sample.sample_id, label_type, label, value)
+            for label_type, label, value in predicted_identities
         )
 
         for predicted_label in prediction.labels:
@@ -192,6 +206,7 @@ def run_benchmark(
         dataset_id=manifest.dataset_id,
         dataset_version=manifest.dataset_version,
         manifest_fingerprint=manifest.fingerprint(),
+        dataset_content_fingerprint=dataset_content_fingerprint,
         evaluator_version=config.evaluator_version,
         config=config,
     )
@@ -200,6 +215,7 @@ def run_benchmark(
         report_kind=report_kind,
         reproducibility=reproducibility,
         metrics=tuple(metrics),
+        system_metrics=system_metrics,
     )
 
 
@@ -225,20 +241,30 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=[member.value for member in BenchmarkReportKind],
         default=BenchmarkReportKind.BENCHMARK.value,
     )
+    parser.add_argument(
+        "--system-metrics",
+        help="Optional JSON file with measured p50/p95 latency and RAM/VRAM values",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     manifest = load_manifest(args.manifest)
+    dataset_content_fingerprint = None
     if args.dataset_root:
-        manifest.validate_references(args.dataset_root)
+        dataset_content_fingerprint = manifest.validate_references(args.dataset_root)
     predictions = load_predictions(args.predictions)
+    system_metrics = (
+        None if args.system_metrics is None else load_system_metrics(args.system_metrics)
+    )
     report = run_benchmark(
         manifest,
         predictions,
         config=BenchmarkConfig(calibration_bins=args.calibration_bins),
         report_kind=BenchmarkReportKind(args.report_kind),
+        dataset_content_fingerprint=dataset_content_fingerprint,
+        system_metrics=system_metrics,
     )
     serialized = report.to_json() + "\n"
     if args.output:

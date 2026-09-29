@@ -110,15 +110,17 @@ def macro_f1(
                 "macro F1 inputs contain labels outside the explicit class universe"
             )
 
-    supported_classes = [
-        label for label in class_set if any(label in expected for expected in expected_sets)
+    evaluated_classes = [
+        label
+        for label in class_set
+        if any(label in expected for expected in expected_sets)
+        or any(label in predicted for predicted in predicted_sets)
     ]
-    if not supported_classes:
-        has_predictions = any(predicted for predicted in predicted_sets)
-        return 0.0 if has_predictions else 1.0
+    if not evaluated_classes:
+        return 1.0
 
     per_class_f1: list[float] = []
-    for label in sorted(supported_classes, key=repr):
+    for label in sorted(evaluated_classes, key=repr):
         expected_binary = [label in items for items in expected_sets]
         predicted_binary = [label in items for items in predicted_sets]
         true_positive = sum(e and p for e, p in zip(expected_binary, predicted_binary))

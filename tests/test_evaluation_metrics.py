@@ -69,6 +69,14 @@ class EvaluationMetricTests(unittest.TestCase):
         )
         self.assertEqual(value, 0.5)
 
+    def test_macro_f1_penalizes_predicted_only_classes(self):
+        value = macro_f1(
+            [{"a"}],
+            [{"a", "b"}],
+            classes={"a", "b"},
+        )
+        self.assertEqual(value, 0.5)
+
     def test_macro_f1_all_zero_support_semantics(self):
         self.assertEqual(macro_f1([set()], [set()], classes={"a"}), 1.0)
         self.assertEqual(macro_f1([set()], [{"a"}], classes={"a"}), 0.0)
@@ -121,9 +129,10 @@ class EvaluationMetricTests(unittest.TestCase):
                 [
                     ("visible_sports_content", "Visible sports content"),
                     ("person_religion", "Person religion = x"),
+                    ("observable_note", "مذهب شخص = نمونه"),
                 ]
             ),
-            0.5,
+            2 / 3,
         )
 
     def test_metric_result_rejects_nan_infinity_and_bounded_range_violation(self):
@@ -132,6 +141,16 @@ class EvaluationMetricTests(unittest.TestCase):
                 MetricResult("metric", value, 1)
         with self.assertRaises(EvaluationValidationError):
             MetricResult("bounded", 1.1, 1, minimum=0.0, maximum=1.0)
+
+    def test_system_metrics_json_contract_allows_omitted_optional_vram(self):
+        metrics = SystemMetrics.from_dict(
+            {
+                "p50_latency_ms": 10.0,
+                "p95_latency_ms": 20.0,
+                "ram_mb": 512.0,
+            }
+        )
+        self.assertIsNone(metrics.vram_mb)
 
     def test_system_metric_representation_validates_order_and_finiteness(self):
         metrics = SystemMetrics(10.0, 20.0, 512.0, 128.0)

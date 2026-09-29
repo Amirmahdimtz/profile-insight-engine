@@ -13,7 +13,7 @@ The manifest contract is `EvaluationDatasetManifest` in `evaluation/contracts.py
 - `schema_version`: fixed Phase 2 dataset schema version (`1.0.0`).
 - `dataset_id`: stable dataset identity.
 - `dataset_version`: required numeric `MAJOR.MINOR.PATCH` version.
-- `label_schema_version`: fixed Phase 2 label schema version (`1.0.0`).
+- `label_schema_version`: fixed Phase 2 label schema version (`1.1.0`).
 - `data_policy`: curator declaration `consented_or_authorized`. This is an auditable dataset assertion; software cannot independently prove consent.
 - `samples`: deterministic collection of `EvaluationSample` values.
 
@@ -41,14 +41,15 @@ Validation enforces:
 - train/eval leakage detection at image-ID and image-reference level;
 - safe relative POSIX references (no absolute paths, `..`, or backslashes);
 - optional filesystem existence validation without decoding images;
+- SHA-256 byte hashing when `--dataset-root` is supplied, including duplicate-content and cross-split content-leakage detection;
 - strict unknown-field rejection;
 - stable ordering and serialization;
 - finite JSON numeric values;
 - dataset and label schema version compatibility.
 
-Phase 2 does **not** compute image-content hashes. Two different paths containing the same bytes cannot be identified as duplicates until an ingestion/content-hash contract exists in Phase 3. This limitation is intentional rather than an incomplete deduplication implementation.
+Phase 2 computes SHA-256 over referenced file bytes only when a dataset root is explicitly supplied for evaluation validation. This is an evaluation-integrity hash: it detects duplicate bytes, train/eval content leakage, and dataset mutation without decoding images. It is **not** the Phase 3 `CanonicalImage` content hash and is not used by the production ingestion pipeline.
 
-The manifest fingerprint is SHA-256 over the deterministic UTF-8 JSON representation of the complete manifest. It fingerprints manifest identity and annotations, not raw image bytes.
+The manifest fingerprint is SHA-256 over the deterministic UTF-8 JSON representation of the complete manifest. Reports may additionally carry `dataset_content_fingerprint`, derived from the referenced file bytes, so annotations and raw evaluation inputs can be audited independently.
 
 ## Label schema and policy boundary
 
@@ -59,6 +60,7 @@ The manifest fingerprint is SHA-256 over the deterministic UTF-8 JSON representa
 - OCR/text;
 - activity;
 - environment;
+- topic;
 - non-sensitive visible interest;
 - brand;
 - team;
@@ -82,13 +84,13 @@ Rejected example:
 
 `PredictionSet` contains predictions for the `eval` split only and must exactly cover that split. It records:
 
-- observable structured label predictions with confidence in `[0, 1]`;
+- observable structured label predictions with `type`, `label`, structured `value`, and confidence in `[0, 1]`;
 - optional OCR text;
 - generic predicted claims used to measure unsupported-claim rate.
 
 Observable label predictions themselves remain policy-safe. Generic claims are allowed to contain unsupported output specifically so the evaluator can measure the unsupported-claim rate using the Phase 1 policy.
 
-Duplicate structured label predictions are rejected to avoid ambiguous metric counting.
+Duplicate structured label predictions are rejected to avoid ambiguous metric counting. Classification identity is `(type, label, canonical value)`, so a correct label with the wrong structured value is counted as incorrect rather than silently accepted.
 
 ## Metrics
 
@@ -110,7 +112,7 @@ The generic calculators in `evaluation/metrics.py` are runtime- and provider-ind
 - expected non-empty, predicted empty => `0.0` F1;
 - expected empty, predicted non-empty => `0.0` F1.
 
-`macro_f1` supports an explicit class universe. Classes with zero ground-truth support are excluded from the macro average. If every class has zero support, the result is `1.0` only when there are no predictions and otherwise `0.0`.
+`macro_f1` supports an explicit class universe. Classes absent from both ground truth and predictions are excluded; predicted-only classes are included and therefore penalize false positives. If no class is present in either ground truth or predictions, the result is `1.0`.
 
 ### Retrieval
 
@@ -132,9 +134,9 @@ Unsupported-claim rate is `unsupported claims / total claims`, where support is 
 
 ### System metrics
 
-`SystemMetrics` represents p50 latency, p95 latency, RAM, and optional VRAM with finite non-negative validation and `p95 >= p50`.
+`SystemMetrics` represents p50 latency, p95 latency, RAM, and optional VRAM with finite non-negative validation and `p95 >= p50`. The benchmark CLI can accept measured values through `--system-metrics <json>`.
 
-Phase 2 does not invent runtime measurements. System metrics are represented but are not fabricated by the structured-data benchmark runner.
+Phase 2 does not invent runtime measurements. System metrics are included only when an external benchmark step supplies measured values.
 
 ## Benchmark runner
 
@@ -146,15 +148,16 @@ python -m evaluation.benchmark --manifest <manifest.json> --predictions <predict
 
 Optional flags:
 
-- `--dataset-root <path>` validates that every referenced file exists under the supplied root without opening/decoding it;
+- `--dataset-root <path>` validates references, hashes raw file bytes without image decoding, detects byte-identical duplicates/leakage, and records `dataset_content_fingerprint`;
 - `--calibration-bins <positive integer>` controls ECE binning and is recorded in reproducibility metadata;
-- `--report-kind benchmark|infrastructure_sanity_baseline` explicitly distinguishes ordinary reports from the test-only infrastructure baseline.
+- `--report-kind benchmark|infrastructure_sanity_baseline` explicitly distinguishes ordinary reports from the test-only infrastructure baseline;
+- `--system-metrics <json>` attaches externally measured p50/p95 latency and RAM/optional VRAM values without fabricating measurements.
 
 The runner currently wires metrics that can be derived correctly from the Phase 2 sample/prediction contract:
 
 - mean per-labeled-sample OCR CER;
 - mean per-labeled-sample OCR WER;
-- visual label micro precision/recall/F1 across `(sample, type, label)` identities;
+- visual label micro precision/recall/F1 across `(sample, type, label, canonical value)` identities;
 - confidence ECE over predicted observable labels;
 - unsupported-claim rate.
 
@@ -166,6 +169,7 @@ Reports contain:
 
 - dataset ID and dataset version;
 - deterministic manifest SHA-256 fingerprint;
+- optional dataset-content SHA-256 fingerprint when referenced files are available;
 - evaluator version;
 - explicit metric configuration;
 - stable sample, label, prediction, and metric ordering;
@@ -200,7 +204,7 @@ A real project dataset is not committed in Phase 2. Keep authorized data outside
 
 Each manifest image `relative_path` is interpreted relative to `<dataset-root>`.
 
-Validate structure and references:
+Validate structure, references, duplicate bytes, cross-split byte leakage, and compute the dataset-content fingerprint:
 
 ```text
 python -m evaluation.validate_dataset --manifest <dataset-root>/manifest.json --dataset-root <dataset-root>
@@ -216,4 +220,4 @@ A real OCR/Vision/Embedding baseline cannot exist until authorized project data 
 
 ## Phase boundary
 
-Phase 2 adds no image decoding, MIME validation, resize/orientation/EXIF work, `CanonicalImage`, content hashing, OCR/VLM/Embedding provider, model loading, CUDA/GPU runtime, aggregation runtime, insight generation, HTTP API, persistence, SQLAlchemy, Alembic, queue/worker, deployment, production model selection, or production threshold tuning.
+Phase 2 adds no image decoding, MIME validation, resize/orientation/EXIF work, `CanonicalImage`, production ingestion hashing/deduplication, OCR/VLM/Embedding provider, model loading, CUDA/GPU runtime, aggregation runtime, insight generation, HTTP API, persistence, SQLAlchemy, Alembic, queue/worker, deployment, production model selection, or production threshold tuning. Evaluation-only byte hashing is limited to dataset integrity checks.

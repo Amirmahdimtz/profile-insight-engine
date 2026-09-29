@@ -44,6 +44,10 @@ class ExpectedEvidenceLabel:
         object.__setattr__(self, "label", _validate_observable_label(self.label))
         object.__setattr__(self, "value", _normalize_json_value(self.value, "label.value"))
 
+    @property
+    def identity(self) -> tuple[str, str, str]:
+        return self.type.value, self.label, deterministic_json(self.value)
+
     @classmethod
     def from_dict(cls, payload: Any) -> "ExpectedEvidenceLabel":
         payload = _expect_mapping(payload, cls.__name__)
@@ -94,6 +98,9 @@ class EvaluationGroundTruth:
         label_ids = [item.label_id for item in labels]
         if len(label_ids) != len(set(label_ids)):
             raise EvaluationValidationError("ground_truth.label_id values must be unique")
+        identities = [item.identity for item in labels]
+        if len(identities) != len(set(identities)):
+            raise EvaluationValidationError("ground_truth labels must not contain duplicate identities")
         labels = tuple(sorted(labels, key=lambda item: item.label_id))
 
         if self.ocr_text is not None and not isinstance(self.ocr_text, str):
@@ -267,10 +274,21 @@ class EvaluationDatasetManifest:
     def fingerprint(self) -> str:
         return hashlib.sha256(self.to_json().encode("utf-8")).hexdigest()
 
-    def validate_references(self, dataset_root: str | Path) -> None:
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def validate_references(self, dataset_root: str | Path) -> str:
         root = Path(dataset_root).resolve()
         if not root.is_dir():
             raise EvaluationValidationError("dataset_root must be an existing directory")
+
+        content_entries: list[dict[str, str]] = []
+        content_hashes: dict[str, EvaluationSample] = {}
         for sample in self.samples:
             candidate = (root / sample.image.relative_path).resolve()
             try:
@@ -283,6 +301,31 @@ class EvaluationDatasetManifest:
                 raise EvaluationValidationError(
                     f"image reference does not exist: {sample.image.relative_path}"
                 )
+
+            content_sha256 = self._file_sha256(candidate)
+            previous = content_hashes.get(content_sha256)
+            if previous is not None:
+                if previous.split is not sample.split:
+                    raise EvaluationValidationError(
+                        "train/eval leakage for identical image content: "
+                        f"{previous.image.relative_path}, {sample.image.relative_path}"
+                    )
+                raise EvaluationValidationError(
+                    "duplicate image content: "
+                    f"{previous.image.relative_path}, {sample.image.relative_path}"
+                )
+            content_hashes[content_sha256] = sample
+            content_entries.append(
+                {
+                    "sample_id": sample.sample_id,
+                    "image_id": sample.image.image_id,
+                    "relative_path": sample.image.relative_path,
+                    "sha256": content_sha256,
+                }
+            )
+
+        payload = deterministic_json(content_entries).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
 
     @classmethod
     def from_dict(cls, payload: Any) -> "EvaluationDatasetManifest":

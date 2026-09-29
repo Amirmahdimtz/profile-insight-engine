@@ -26,13 +26,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     manifest = load_manifest(args.manifest)
+    dataset_content_fingerprint = None
     if args.dataset_root:
-        manifest.validate_references(args.dataset_root)
-    print(
+        dataset_content_fingerprint = manifest.validate_references(args.dataset_root)
+    message = (
         f"VALID dataset_id={manifest.dataset_id} "
         f"dataset_version={manifest.dataset_version} "
         f"manifest_fingerprint={manifest.fingerprint()}"
     )
+    if dataset_content_fingerprint is not None:
+        message += f" dataset_content_fingerprint={dataset_content_fingerprint}"
+    print(message)
     return 0
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import unicodedata
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -105,8 +106,35 @@ _SENSITIVE_TRAIT_PHRASES = (
     "family relationship",
     "personality trait",
     "inner personality",
+    "مذهب",
+    "دین",
+    "گرایش سیاسی",
+    "ایدئولوژی سیاسی",
+    "قومیت",
+    "سلامت روان",
+    "گرایش جنسی",
+    "هوش",
+    "صداقت",
+    "رابطه خانوادگی",
+    "نسبت خانوادگی",
+    "ویژگی شخصیتی",
+    "صفات شخصیتی",
+    "شخصیت درونی",
 )
-_SUBJECT_TERMS = ("person", "user", "subject", "individual", "owner", "profile owner")
+_SUBJECT_TERMS = (
+    "person",
+    "user",
+    "subject",
+    "individual",
+    "owner",
+    "profile owner",
+    "شخص",
+    "فرد",
+    "کاربر",
+    "سوژه",
+    "صاحب پروفایل",
+    "صاحب حساب",
+)
 
 
 def _require_non_empty_text(value: Any, field_name: str) -> str:
@@ -154,10 +182,21 @@ def _require_unique_ids(values: Sequence[str], field_name: str) -> tuple[str, ..
     return normalized
 
 
-def validate_observable_claim(key: str | None, label: str) -> None:
-    """Reject unsupported personal sensitive-trait claims using the Phase 1 policy."""
+def _normalize_policy_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).lower()
+    normalized = normalized.replace("ي", "ی").replace("ك", "ک")
+    normalized = normalized.replace("\u200c", " ").replace("_", " ")
+    return " ".join(normalized.split())
 
-    normalized_label = " ".join(label.lower().replace("_", " ").split())
+
+def _contains_policy_phrase(text: str, phrase: str) -> bool:
+    return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text) is not None
+
+
+def validate_observable_claim(key: str | None, label: str) -> None:
+    """Reject unsupported personal sensitive-trait claims in English or Persian."""
+
+    normalized_label = _normalize_policy_text(label)
     normalized_key = key.lower() if key is not None else None
 
     if normalized_key in _SENSITIVE_TRAIT_KEYS:
@@ -165,28 +204,31 @@ def validate_observable_claim(key: str | None, label: str) -> None:
             f"unsupported sensitive inference key: {normalized_key}"
         )
 
-    if normalized_label in _SENSITIVE_TRAIT_PHRASES:
+    normalized_traits = tuple(_normalize_policy_text(value) for value in _SENSITIVE_TRAIT_PHRASES)
+    normalized_subjects = tuple(_normalize_policy_text(value) for value in _SUBJECT_TERMS)
+
+    if normalized_label in normalized_traits:
         raise ContractValidationError(
             f"unsupported sensitive inference label: {label}"
         )
 
-    for trait in _SENSITIVE_TRAIT_PHRASES:
-        if trait not in normalized_label:
-            continue
-        if any(subject in normalized_label for subject in _SUBJECT_TERMS):
-            raise ContractValidationError(
-                f"unsupported sensitive inference label: {label}"
-            )
+    if any(_contains_policy_phrase(normalized_label, trait) for trait in normalized_traits) and any(
+        _contains_policy_phrase(normalized_label, subject) for subject in normalized_subjects
+    ):
+        raise ContractValidationError(
+            f"unsupported sensitive inference label: {label}"
+        )
 
     if normalized_key is not None:
-        normalized_key_phrase = normalized_key.replace("_", " ")
-        for trait in _SENSITIVE_TRAIT_PHRASES:
-            if trait not in normalized_key_phrase:
-                continue
-            if any(subject in normalized_key_phrase for subject in _SUBJECT_TERMS):
-                raise ContractValidationError(
-                    f"unsupported sensitive inference key: {normalized_key}"
-                )
+        normalized_key_phrase = _normalize_policy_text(normalized_key)
+        if any(
+            _contains_policy_phrase(normalized_key_phrase, trait) for trait in normalized_traits
+        ) and any(
+            _contains_policy_phrase(normalized_key_phrase, subject) for subject in normalized_subjects
+        ):
+            raise ContractValidationError(
+                f"unsupported sensitive inference key: {normalized_key}"
+            )
 
 
 # Backward-compatible private alias used internally by the verified Phase 1 contract.

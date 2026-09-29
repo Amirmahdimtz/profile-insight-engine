@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "dataset_id": "phase2_sanity_fixture",
   "dataset_version": "1.0.0",
   "predictions": [
@@ -9,7 +9,8 @@
         {
           "type": "object",
           "label": "test-only bicycle object",
-          "confidence": 0.8
+          "confidence": 0.8,
+          "value": "bicycle"
         }
       ],
       "ocr_text": "سلام دنیا",
@@ -27,12 +28,14 @@
         {
           "type": "scene",
           "label": "test-only outdoor park scene",
-          "confidence": 0.7
+          "confidence": 0.7,
+          "value": "park"
         },
         {
           "type": "brand",
           "label": "test-only coffee brand reference",
-          "confidence": 0.2
+          "confidence": 0.2,
+          "value": "coffee_brand"
         }
       ],
       "ocr_text": "",

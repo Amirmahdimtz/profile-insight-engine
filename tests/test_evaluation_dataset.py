@@ -64,6 +64,9 @@ class EvaluationDatasetContractTests(unittest.TestCase):
         self.assertEqual(manifest.samples[0].split, DatasetSplit.EVAL)
         self.assertEqual(len(manifest.fingerprint()), 64)
 
+    def test_topic_is_representable_in_evaluation_label_schema(self):
+        self.assertEqual(EvaluationLabelType.TOPIC.value, "topic")
+
     def test_required_dataset_slices_are_representable(self):
         self.assertEqual(
             {item.value for item in DatasetSlice},
@@ -170,6 +173,10 @@ class EvaluationDatasetContractTests(unittest.TestCase):
         with self.assertRaises(EvaluationValidationError):
             self._sample(label="Person religion = example")
 
+    def test_persian_sensitive_person_trait_label_is_rejected_via_phase1_policy(self):
+        with self.assertRaises(EvaluationValidationError):
+            self._sample(label="مذهب شخص = نمونه")
+
     def test_religious_content_observation_is_allowed(self):
         label = ExpectedEvidenceLabel(
             label_id="religious_content_1",
@@ -196,6 +203,22 @@ class EvaluationDatasetContractTests(unittest.TestCase):
             UnsupportedClaimCategory.PERSON_RELIGION,
         )
 
+    def test_duplicate_ground_truth_identity_is_rejected_even_with_different_label_ids(self):
+        first = ExpectedEvidenceLabel(
+            label_id="label_1",
+            type=EvaluationLabelType.BRAND,
+            label="brand reference",
+            value="Nike",
+        )
+        second = ExpectedEvidenceLabel(
+            label_id="label_2",
+            type=EvaluationLabelType.BRAND,
+            label="brand reference",
+            value="Nike",
+        )
+        with self.assertRaisesRegex(EvaluationValidationError, "duplicate identities"):
+            EvaluationGroundTruth(labels=(first, second))
+
     def test_non_finite_ground_truth_value_is_rejected(self):
         with self.assertRaises(EvaluationValidationError):
             ExpectedEvidenceLabel(
@@ -210,16 +233,53 @@ class EvaluationDatasetContractTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(EvaluationValidationError):
                 EvaluationImageReference(image_id="img_1", relative_path=value)
 
-    def test_reference_existence_validation_does_not_decode_images(self):
+    def test_reference_validation_hashes_bytes_without_decoding_images(self):
         manifest = self._manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "images" / "eval_1.png"
             path.parent.mkdir(parents=True)
             path.write_bytes(b"not-an-image-and-that-is-intentional-phase2")
-            manifest.validate_references(temp_dir)
+            first_fingerprint = manifest.validate_references(temp_dir)
+            self.assertEqual(len(first_fingerprint), 64)
+
+            path.write_bytes(b"same-reference-different-bytes")
+            second_fingerprint = manifest.validate_references(temp_dir)
+            self.assertNotEqual(first_fingerprint, second_fingerprint)
+
             path.unlink()
             with self.assertRaisesRegex(EvaluationValidationError, "does not exist"):
                 manifest.validate_references(temp_dir)
+
+    def test_content_duplicate_and_cross_split_leakage_are_detected(self):
+        first = self._sample(
+            sample_id="sample_eval_1",
+            image_id="img_eval_1",
+            relative_path="images/eval_1.png",
+            split=DatasetSplit.EVAL,
+        )
+        second = self._sample(
+            sample_id="sample_eval_2",
+            image_id="img_eval_2",
+            relative_path="images/eval_2.png",
+            split=DatasetSplit.EVAL,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "images").mkdir()
+            (root / "images/eval_1.png").write_bytes(b"same-content")
+            (root / "images/eval_2.png").write_bytes(b"same-content")
+            with self.assertRaisesRegex(EvaluationValidationError, "duplicate image content"):
+                self._manifest(samples=(first, second)).validate_references(root)
+
+            train = self._sample(
+                sample_id="sample_train_1",
+                image_id="img_train_1",
+                relative_path="images/train_1.png",
+                split=DatasetSplit.TRAIN,
+            )
+            (root / "images/train_1.png").write_bytes(b"same-content")
+            with self.assertRaisesRegex(EvaluationValidationError, "train/eval leakage"):
+                self._manifest(samples=(train, first)).validate_references(root)
 
     def test_manifest_serialization_and_fingerprint_are_deterministic(self):
         first = self._sample(

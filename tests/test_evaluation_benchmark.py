@@ -11,6 +11,7 @@ from evaluation.contracts import (
     EvaluationDatasetManifest,
     EvaluationValidationError,
     PredictionSet,
+    SystemMetrics,
 )
 
 
@@ -76,6 +77,20 @@ class BenchmarkRunnerTests(unittest.TestCase):
         )
         self.assertEqual(report.reproducibility.config.calibration_bins, 10)
 
+    def test_report_accepts_measured_system_metrics_and_dataset_content_fingerprint(self):
+        content_fingerprint = "a" * 64
+        system_metrics = SystemMetrics(10.0, 20.0, 512.0)
+        report = run_benchmark(
+            self.manifest,
+            self.predictions,
+            dataset_content_fingerprint=content_fingerprint,
+            system_metrics=system_metrics,
+        )
+        self.assertEqual(
+            report.reproducibility.dataset_content_fingerprint, content_fingerprint
+        )
+        self.assertEqual(report.system_metrics, system_metrics)
+
     def test_dataset_id_and_version_must_match_predictions(self):
         payload = json.loads(self.predictions.to_json())
         payload["dataset_id"] = "other_dataset"
@@ -99,6 +114,15 @@ class BenchmarkRunnerTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(EvaluationValidationError, "unexpected predictions"):
             run_benchmark(self.manifest, PredictionSet.from_dict(payload))
+
+    def test_visual_metrics_include_structured_label_value_identity(self):
+        payload = json.loads(self.predictions.to_json())
+        payload["predictions"][0]["labels"][0]["value"] = "wrong-value"
+        report = run_benchmark(self.manifest, PredictionSet.from_dict(payload))
+        metrics = {metric.name: metric.value for metric in report.metrics}
+        self.assertAlmostEqual(metrics["visual_precision"], 1 / 3)
+        self.assertAlmostEqual(metrics["visual_recall"], 1 / 2)
+        self.assertAlmostEqual(metrics["visual_f1"], 0.4)
 
     def test_malformed_duplicate_predicted_label_is_rejected(self):
         payload = json.loads(self.predictions.to_json())
