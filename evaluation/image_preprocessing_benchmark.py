@@ -81,11 +81,56 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
+def _windows_peak_working_set_mb() -> float:
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessMemoryCounters(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    get_current_process = kernel32.GetCurrentProcess
+    get_current_process.restype = wintypes.HANDLE
+    get_process_memory_info = psapi.GetProcessMemoryInfo
+    get_process_memory_info.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessMemoryCounters),
+        wintypes.DWORD,
+    ]
+    get_process_memory_info.restype = wintypes.BOOL
+
+    counters = ProcessMemoryCounters()
+    counters.cb = ctypes.sizeof(counters)
+    if not get_process_memory_info(
+        get_current_process(),
+        ctypes.byref(counters),
+        counters.cb,
+    ):
+        error_code = ctypes.get_last_error()
+        raise OSError(error_code, "GetProcessMemoryInfo failed")
+    return float(counters.PeakWorkingSetSize) / (1024 * 1024)
+
+
 def _peak_rss_mb() -> float:
+    if sys.platform == "win32":
+        return _windows_peak_working_set_mb()
+
     try:
         import resource
-    except ImportError as exc:  # pragma: no cover - Windows is not a supported local benchmark host.
-        raise RuntimeError("RAM peak measurement requires the POSIX resource module") from exc
+    except ImportError as exc:
+        raise RuntimeError("RAM peak measurement is unsupported on this platform") from exc
     value = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     if sys.platform == "darwin":
         return value / (1024 * 1024)

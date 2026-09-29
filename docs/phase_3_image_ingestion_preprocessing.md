@@ -44,15 +44,36 @@ The repository had no runtime DI/config implementation before Phase 3. The minim
 
 ## Benchmark evidence
 
-Use the real authorized Phase 2 dataset:
+Use the real authorized Phase 2 dataset.
 
-```text
+PowerShell:
+
+```powershell
+$env:DATASET_ROOT = "C:\\absolute\\path\\to\\authorized\\evaluation-dataset"
+$env:MANIFEST_PATH = Join-Path $env:DATASET_ROOT "manifest.json"
+
+python -m evaluation.validate_dataset --manifest "$env:MANIFEST_PATH" --dataset-root "$env:DATASET_ROOT"
+
+python -m evaluation.image_preprocessing_benchmark `
+  --manifest "$env:MANIFEST_PATH" `
+  --dataset-root "$env:DATASET_ROOT" `
+  --batch-sizes 1,5,20,50 `
+  --iterations 3 `
+  --output "$env:TEMP\\phase3_image_preprocessing_benchmark.json"
+```
+
+POSIX shell:
+
+```sh
+export DATASET_ROOT="/absolute/path/to/authorized/evaluation-dataset"
+export MANIFEST_PATH="$DATASET_ROOT/manifest.json"
+
 python -m evaluation.image_preprocessing_benchmark \
-  --manifest <dataset-root>/manifest.json \
-  --dataset-root <dataset-root> \
+  --manifest "$MANIFEST_PATH" \
+  --dataset-root "$DATASET_ROOT" \
   --batch-sizes 1,5,20,50 \
   --iterations 3 \
-  --output phase3_image_preprocessing_benchmark.json
+  --output /tmp/phase3_image_preprocessing_benchmark.json
 ```
 
 The benchmark revalidates the Phase 2 dataset-content fingerprint, runs full Phase 3 processing for each requested batch size, verifies canonical hash stability across reruns, records p50/p95 batch latency and process peak RSS, measures decode throughput, and records an isolated resize-cost measurement using the same resize geometry/resampling settings. It fails instead of silently skipping a requested batch size when the dataset is too small.
