@@ -49,6 +49,76 @@ Tesseract is implemented as the first real local/offline provider because it sup
 
 The Phase 4 benchmark accepts multiple Tesseract tessdata candidates in one run. The intended first comparison is official `tessdata_fast` versus `tessdata_best` for `fas`, `eng`, and `osd`. A candidate name and tessdata directory are report metadata; no automatic winner is promoted into runtime config.
 
+Official references:
+
+- Windows installation: https://tesseract-ocr.github.io/tessdoc/Installation.html#windows
+- `tessdata_fast`: https://github.com/tesseract-ocr/tessdata_fast
+- `tessdata_best`: https://github.com/tesseract-ocr/tessdata_best
+
+## Windows local verification prerequisites
+
+Tesseract installation and traineddata installation are separate prerequisites. Do not run the OCR benchmark until both are available.
+
+PowerShell variables, from the repository root:
+
+```powershell
+$env:DATASET_ROOT = "E:\phase2-real-dataset"
+$env:MODEL_ROOT = "E:\profile-insight-models"
+$env:TESSDATA_FAST = Join-Path $env:MODEL_ROOT "tessdata_fast"
+$env:TESSDATA_BEST = Join-Path $env:MODEL_ROOT "tessdata_best"
+$env:PHASE4_REPORT = Join-Path (Get-Location) "phase4_ocr_benchmark.json"
+$env:EXPECTED_MANIFEST_FINGERPRINT = "99cda3c3e756f46f08f545398c934f8f811493852bfc9d1d1a4c8473ea1538bf"
+$env:EXPECTED_DATASET_CONTENT_FINGERPRINT = "41b540e9590c3397d2784a8cfd333b22d8ef53a44af548c231e3c33d4b666c62"
+```
+
+Verify the Tesseract executable first:
+
+```powershell
+$TesseractCommand = Get-Command tesseract -ErrorAction SilentlyContinue
+if (-not $TesseractCommand) {
+    $DefaultTesseractExe = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if (Test-Path $DefaultTesseractExe) {
+        $env:PATH = "$(Split-Path $DefaultTesseractExe);$env:PATH"
+        $TesseractCommand = Get-Command tesseract -ErrorAction SilentlyContinue
+    }
+}
+if (-not $TesseractCommand) {
+    throw "Tesseract 5 is not installed or is not on PATH. Install the Windows build referenced by the official Tesseract documentation, then reopen PowerShell."
+}
+tesseract --version
+```
+
+Create the candidate model directories and download only the required official traineddata files:
+
+```powershell
+New-Item -ItemType Directory -Force -Path $env:TESSDATA_FAST,$env:TESSDATA_BEST | Out-Null
+foreach ($Language in @("fas","eng","osd")) {
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$Language.traineddata" -OutFile (Join-Path $env:TESSDATA_FAST "$Language.traineddata")
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/$Language.traineddata" -OutFile (Join-Path $env:TESSDATA_BEST "$Language.traineddata")
+}
+```
+
+Fail fast if any required model is missing or empty:
+
+```powershell
+foreach ($Directory in @($env:TESSDATA_FAST,$env:TESSDATA_BEST)) {
+    foreach ($Language in @("fas","eng","osd")) {
+        $ModelPath = Join-Path $Directory "$Language.traineddata"
+        if (-not (Test-Path $ModelPath -PathType Leaf)) { throw "Missing traineddata file: $ModelPath" }
+        if ((Get-Item $ModelPath).Length -le 0) { throw "Empty traineddata file: $ModelPath" }
+    }
+}
+```
+
+Verify Tesseract can load each candidate:
+
+```powershell
+tesseract --tessdata-dir "$env:TESSDATA_FAST" --list-langs
+tesseract --tessdata-dir "$env:TESSDATA_BEST" --list-langs
+```
+
+Both lists must contain `fas`, `eng`, and `osd`.
+
 ## Evaluation and benchmark
 
 `evaluation.ocr_benchmark` reuses the verified Phase 2 manifest, reference validation/fingerprints, CER/WER calculators, Phase 3 canonicalization, and the production Phase 4 OCR service/provider path. It includes only eval samples whose `ground_truth.ocr_text` is not null and reports actual OCR-ground-truth coverage by Phase 2 slice instead of assuming annotation coverage.
@@ -67,6 +137,21 @@ For each candidate it records:
 On Windows, stdlib process accounting cannot reliably include the Tesseract child process CPU, so `cpu_usage_percent` is explicitly `null` rather than fabricated. The report also states that process RSS is the Python process metric and does not claim Tesseract child peak memory. A future resource measurement dependency is not added solely to manufacture Phase 4 numbers.
 
 The command accepts expected manifest/content fingerprints and fails on mismatch. The authorized dataset itself is never modified by this benchmark.
+
+PowerShell benchmark command, after the prerequisite checks above:
+
+```powershell
+python -m evaluation.ocr_benchmark --manifest "$env:DATASET_ROOT\manifest.json" --dataset-root "$env:DATASET_ROOT" --candidate "tessdata_fast=$env:TESSDATA_FAST" --candidate "tessdata_best=$env:TESSDATA_BEST" --iterations 2 --expected-manifest-fingerprint "$env:EXPECTED_MANIFEST_FINGERPRINT" --expected-dataset-content-fingerprint "$env:EXPECTED_DATASET_CONTENT_FINGERPRINT" --output "$env:PHASE4_REPORT"
+```
+
+Inspect the report:
+
+```powershell
+$Report = Get-Content "$env:PHASE4_REPORT" -Raw | ConvertFrom-Json
+$Report | Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,eval_sample_count,ocr_ground_truth_sample_count
+$Report.ocr_ground_truth_coverage_by_slice | Format-List
+$Report.candidates | Select-Object candidate,provider,provider_version,model_id,sample_count,raw_cer,raw_wer,normalized_cer,normalized_wer,p50_latency_ms,p95_latency_ms,process_peak_ram_mb,cpu_usage_percent,gpu_required,deterministic_rerun | Format-Table -AutoSize
+```
 
 ## Failure and privacy behavior
 
