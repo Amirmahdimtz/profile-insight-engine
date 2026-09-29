@@ -73,6 +73,8 @@ python -m evaluation.image_preprocessing_benchmark \
   --output /tmp/phase3_image_preprocessing_benchmark.json
 ```
 
-The benchmark revalidates the Phase 2 dataset-content fingerprint, runs full Phase 3 processing for each requested batch size, verifies canonical hash stability across reruns, records p50/p95 batch latency and process peak RSS, measures decode throughput, and records an isolated resize-cost measurement using the same resize geometry/resampling settings. It fails instead of silently skipping a requested batch size when the dataset is too small.
+The benchmark revalidates the Phase 2 dataset-content fingerprint, runs full Phase 3 processing for each requested batch size, verifies canonical hash stability across reruns, records p50/p95 batch latency and process peak RSS, measures decode throughput, and records an isolated resize-cost measurement using the same resize geometry/resampling settings.
+
+If a requested workload is larger than the authorized Phase 2 dataset, the benchmark deterministically replays source samples in manifest order without changing their bytes or the dataset manifest. Each replay receives a benchmark-only unique request image ID so the workload still exercises the configured image-count path. The report records `dataset_sample_count`, plus `source_sample_count` and `replayed_sample_count` for every batch. This replay is only system-load evidence for Phase 3; it must not be interpreted as additional dataset diversity or as model-quality evidence.
 
 Performance numbers are evidence, not hard-coded acceptance thresholds in Phase 3. Final operational tuning remains a Phase 10 responsibility.

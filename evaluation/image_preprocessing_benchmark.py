@@ -31,6 +31,8 @@ _FORMAT_TO_MIME = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp
 class BatchBenchmarkResult:
     image_count: int
     iterations: int
+    source_sample_count: int
+    replayed_sample_count: int
     p50_latency_ms: float
     p95_latency_ms: float
     decode_images_per_second: float
@@ -45,6 +47,7 @@ class ImagePreprocessingBenchmarkReport:
     schema_version: str
     dataset_id: str
     dataset_version: str
+    dataset_sample_count: int
     manifest_fingerprint: str
     dataset_content_fingerprint: str
     pillow_version: str
@@ -79,6 +82,20 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     upper = min(lower + 1, len(ordered) - 1)
     fraction = position - lower
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
+def _workload_sample_indices(dataset_size: int, image_count: int) -> tuple[int, ...]:
+    if dataset_size <= 0:
+        raise ValueError("dataset_size must be positive")
+    if image_count <= 0:
+        raise ValueError("image_count must be positive")
+    return tuple(index % dataset_size for index in range(image_count))
+
+
+def _benchmark_image_id(position: int) -> str:
+    if position < 0:
+        raise ValueError("position must not be negative")
+    return f"phase3-benchmark-image-{position + 1:04d}"
 
 
 def _windows_peak_working_set_mb() -> float:
@@ -211,10 +228,6 @@ async def run_benchmark_async(
     if not batch_sizes or any(size <= 0 for size in batch_sizes) or len(batch_sizes) != len(set(batch_sizes)):
         raise ValueError("batch_sizes must contain unique positive integers")
     content_fingerprint = manifest.validate_references(dataset_root)
-    if max(batch_sizes) > len(manifest.samples):
-        raise ValueError(
-            f"dataset has {len(manifest.samples)} images but batch size {max(batch_sizes)} was requested"
-        )
 
     config_reader = ConfigReader()
     service = ImageProcessingService(config_reader, LocalImageStorage())
@@ -222,22 +235,25 @@ async def run_benchmark_async(
     results: list[BatchBenchmarkResult] = []
 
     for image_count in batch_sizes:
-        selected = manifest.samples[:image_count]
-        contents = [
+        sample_indices = _workload_sample_indices(len(manifest.samples), image_count)
+        selected = tuple(manifest.samples[index] for index in sample_indices)
+        contents = tuple(
             (dataset_root / sample.image.relative_path).read_bytes() for sample in selected
-        ]
+        )
         inputs = tuple(
             RawImageInput(
-                image_id=sample.image.image_id,
+                image_id=_benchmark_image_id(position),
                 filename=Path(sample.image.relative_path).name,
                 declared_mime_type=_declared_mime(content, sample.image.image_id),
                 content=content,
             )
-            for sample, content in zip(selected, contents, strict=True)
+            for position, (sample, content) in enumerate(
+                zip(selected, contents, strict=True)
+            )
         )
         request = ProfileAnalysisRequest(
             analysis_id=f"phase3-benchmark-{image_count}",
-            image_ids=tuple(sample.image.image_id for sample in selected),
+            image_ids=tuple(_benchmark_image_id(position) for position in range(image_count)),
         )
 
         latencies: list[float] = []
@@ -259,6 +275,8 @@ async def run_benchmark_async(
             BatchBenchmarkResult(
                 image_count=image_count,
                 iterations=iterations,
+                source_sample_count=len(set(sample_indices)),
+                replayed_sample_count=image_count - len(set(sample_indices)),
                 p50_latency_ms=statistics.median(latencies),
                 p95_latency_ms=_percentile(latencies, 0.95),
                 decode_images_per_second=decode_throughput,
@@ -270,9 +288,10 @@ async def run_benchmark_async(
         )
 
     return ImagePreprocessingBenchmarkReport(
-        schema_version="1.0.0",
+        schema_version="1.1.0",
         dataset_id=manifest.dataset_id,
         dataset_version=manifest.dataset_version,
+        dataset_sample_count=len(manifest.samples),
         manifest_fingerprint=manifest.fingerprint(),
         dataset_content_fingerprint=content_fingerprint,
         pillow_version=pillow_version,
