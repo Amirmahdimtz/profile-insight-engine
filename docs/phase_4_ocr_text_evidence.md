@@ -67,8 +67,8 @@ $env:MODEL_ROOT = "E:\profile-insight-models"
 $env:TESSDATA_FAST = Join-Path $env:MODEL_ROOT "tessdata_fast"
 $env:TESSDATA_BEST = Join-Path $env:MODEL_ROOT "tessdata_best"
 $env:PHASE4_REPORT = Join-Path (Get-Location) "phase4_ocr_benchmark.json"
-$env:EXPECTED_MANIFEST_FINGERPRINT = "99cda3c3e756f46f08f545398c934f8f811493852bfc9d1d1a4c8473ea1538bf"
-$env:EXPECTED_DATASET_CONTENT_FINGERPRINT = "41b540e9590c3397d2784a8cfd333b22d8ef53a44af548c231e3c33d4b666c62"
+$env:EXPECTED_MANIFEST_FINGERPRINT = "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc"
+$env:EXPECTED_DATASET_CONTENT_FINGERPRINT = "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e"
 ```
 
 Verify the Tesseract executable first:
@@ -157,8 +157,39 @@ $Report.candidates | Select-Object candidate,provider,provider_version,model_id,
 
 Provider errors are deterministic sanitized exceptions. No raw image bytes, canonical image bytes, OCR text, TSV output, or sensitive OCR content is written to operational logs by Phase 4 production code. OCR only emits observable text evidence; it does not produce claims about religion, politics, ethnicity, mental health, sexual orientation, intelligence, honesty, family relationships, or other sensitive/internal traits.
 
+## Verified local evidence
+
+Target Windows verification completed with Tesseract `v5.4.0.20240606` and official `tessdata_fast` / `tessdata_best` candidates using `fas+eng+osd`.
+
+Verified dataset identity:
+
+- `dataset_id=profile_insight_real_eval`
+- `dataset_version=1.0.0`
+- manifest fingerprint: `06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc`
+- dataset-content fingerprint: `5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e`
+- 18 eval samples, 15 OCR-ground-truth samples
+- OCR-ground-truth coverage: Persian-heavy 5, English-heavy 1, mixed Persian/English 1, low-quality 1, no-text 8, text-heavy 5, meme 5
+
+Candidate evidence:
+
+| Candidate | Raw CER | Raw WER | p50 ms | p95 ms | Peak Python RSS MB | Deterministic |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `tessdata_fast` | 0.3433123420 | 0.3680080483 | 1490.10 | 4927.42 | 36.02 | yes |
+| `tessdata_best` | 0.3365972274 | 0.3594232059 | 1545.42 | 6774.15 | 36.02 | yes |
+
+Relevant slice evidence:
+
+- Persian-heavy: fast CER/WER `0.7271 / 0.7857`; best `0.7069 / 0.7571`.
+- Mixed Persian/English: both CER `0.5143`; fast WER `0.5915`, best WER `0.6056`.
+- English-heavy / low-quality: both candidates measured CER/WER `1.0 / 1.0` on the current single shared sample. This limitation is retained as benchmark evidence rather than hidden by normalization or threshold tuning.
+- No-text: both candidates measured CER/WER `0.0 / 0.0` across 8 annotated samples.
+
+The benchmark does not establish one tessdata candidate as universally dominant: `tessdata_best` has slightly better overall and Persian accuracy, while `tessdata_fast` has materially lower p95 latency and slightly better mixed WER on the current dataset. Phase 4 therefore verifies the Tesseract provider and keeps the traineddata choice non-final for the broader Phase 10 benchmark rather than prematurely freezing a production model.
+
+Full local regression previously passed 145 tests, including Phase 4 architecture, provider failure, traineddata-only candidate, normalization, mixed-script, deterministic, and DI/discovery coverage. The dataset-only annotation additions did not modify repository runtime code.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 4 must not be marked complete until the real authorized dataset fingerprints, OCR coverage, candidate comparison, full regression, architecture tests, and local Tesseract execution are verified on the target Windows environment.
+Phase 4 is locally verified on the target Windows environment. Provider output normalization, deterministic failure behavior, privacy constraints, real Persian/English/mixed/no-text evaluation coverage, candidate comparison, and reproducibility fingerprints are all evidenced. Final production model/provider tuning remains a Phase 10 responsibility.
