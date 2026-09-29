@@ -54,12 +54,9 @@ $env:MANIFEST_PATH = Join-Path $env:DATASET_ROOT "manifest.json"
 
 python -m evaluation.validate_dataset --manifest "$env:MANIFEST_PATH" --dataset-root "$env:DATASET_ROOT"
 
-python -m evaluation.image_preprocessing_benchmark `
-  --manifest "$env:MANIFEST_PATH" `
-  --dataset-root "$env:DATASET_ROOT" `
-  --batch-sizes 1,5,20,50 `
-  --iterations 3 `
-  --output "$env:TEMP\\phase3_image_preprocessing_benchmark.json"
+$env:PHASE3_REPORT = Join-Path $env:TEMP "phase3_image_preprocessing_benchmark.json"
+
+python -m evaluation.image_preprocessing_benchmark --manifest "$env:MANIFEST_PATH" --dataset-root "$env:DATASET_ROOT" --batch-sizes 1,5,20,50 --iterations 3 --output "$env:PHASE3_REPORT"
 ```
 
 POSIX shell:
