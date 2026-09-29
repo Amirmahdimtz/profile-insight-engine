@@ -18,3 +18,17 @@ ocr:
   timeout_seconds: 30
   model_id: tessdata-default-fas-eng
   config_version: phase4-ocr-v1
+vision:
+  provider: llama_cpp
+  base_url: http://127.0.0.1:8080
+  runtime_executable: llama-server
+  request_timeout_seconds: 120
+  startup_timeout_seconds: 600
+  model_id: ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M
+  model_version: hf-main-q4_k_m
+  config_version: phase5-vision-v1
+  max_tokens: 768
+  temperature: 0.0
+  top_p: 1.0
+  seed: 0
+  confidence_semantics: model_self_reported_uncalibrated
