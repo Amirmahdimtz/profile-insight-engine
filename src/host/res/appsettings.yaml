@@ -33,3 +33,14 @@ vision:
   top_p: 1.0
   seed: 0
   confidence_semantics: model_self_reported_uncalibrated
+embedding:
+  provider: transformers
+  model_id: google/siglip2-base-patch16-224
+  model_revision: main
+  config_version: phase6-embedding-v1-candidate
+  device: cpu
+  batch_size: 8
+  local_files_only: false
+  theme_similarity_threshold: 0.25
+  near_duplicate_similarity_threshold: 0.95
+  retrieval_k: 5
