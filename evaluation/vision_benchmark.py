@@ -628,6 +628,7 @@ async def run_vision_benchmark_async(
     model_acquisition_timeout_seconds: int | None = None,
     request_timeout_seconds: int | None = None,
     max_tokens: int | None = None,
+    skip_model_acquisition: bool = False,
 ) -> dict[str, Any]:
     if iterations <= 0:
         raise ValueError(
@@ -666,6 +667,8 @@ async def run_vision_benchmark_async(
             "startup_timeout_seconds must be a "
             "positive integer when provided"
         )
+    if not isinstance(skip_model_acquisition, bool):
+        raise ValueError("skip_model_acquisition must be a boolean")
     if model_acquisition_timeout_seconds is not None and (
         isinstance(
             model_acquisition_timeout_seconds,
@@ -758,35 +761,37 @@ async def run_vision_benchmark_async(
     candidate_reports: list[dict[str, Any]] = []
 
     for candidate in candidates:
-        acquisition_port = _free_port()
-        acquisition_base_url = (
-            f"http://127.0.0.1:{acquisition_port}"
-        )
-        acquisition_process = _start_runtime(
-            _runtime_command(
-                runtime_executable,
-                candidate,
-                acquisition_port,
-                offline=False,
+        model_acquisition_time_ms: float | None = None
+        if not skip_model_acquisition:
+            acquisition_port = _free_port()
+            acquisition_base_url = (
+                f"http://127.0.0.1:{acquisition_port}"
             )
-        )
-        try:
-            try:
-                model_acquisition_time_ms = (
-                    await asyncio.to_thread(
-                        _wait_for_health,
-                        acquisition_base_url,
-                        model_acquisition_timeout_seconds,
-                        acquisition_process,
-                    )
+            acquisition_process = _start_runtime(
+                _runtime_command(
+                    runtime_executable,
+                    candidate,
+                    acquisition_port,
+                    offline=False,
                 )
-            except RuntimeError as exc:
-                raise RuntimeError(
-                    f"vision candidate '{candidate.name}' "
-                    "model acquisition failed"
-                ) from exc
-        finally:
-            _stop_runtime(acquisition_process)
+            )
+            try:
+                try:
+                    model_acquisition_time_ms = (
+                        await asyncio.to_thread(
+                            _wait_for_health,
+                            acquisition_base_url,
+                            model_acquisition_timeout_seconds,
+                            acquisition_process,
+                        )
+                    )
+                except RuntimeError as exc:
+                    raise RuntimeError(
+                        f"vision candidate '{candidate.name}' "
+                        "model acquisition failed"
+                    ) from exc
+            finally:
+                _stop_runtime(acquisition_process)
 
         port = _free_port()
         base_url = f"http://127.0.0.1:{port}"
@@ -1200,6 +1205,9 @@ async def run_vision_benchmark_async(
                     "model_acquisition_time_ms": (
                         model_acquisition_time_ms
                     ),
+                    "model_acquisition_skipped": (
+                        skip_model_acquisition
+                    ),
                     "model_load_time_ms": (
                         model_load_time_ms
                     ),
@@ -1339,6 +1347,10 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
     )
     parser.add_argument(
+        "--skip-model-acquisition",
+        action="store_true",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
     )
@@ -1383,6 +1395,9 @@ def main(
                 args.request_timeout_seconds
             ),
             max_tokens=args.max_tokens,
+            skip_model_acquisition=(
+                args.skip_model_acquisition
+            ),
         )
     )
     output_path = Path(args.output)
