@@ -37,7 +37,7 @@ The concrete provider records the resolved Hugging Face commit hash when Transfo
 
 `SemanticThemeService.analyze_async()` validates candidate theme labels against the existing Phase 1 observable-claim policy before embedding them. Person-level sensitive inference remains rejected; semantic similarity cannot bypass the safety contract.
 
-Cosine similarity is calculated only from normalized vectors. Theme matches use the configurable `embedding.theme_similarity_threshold`. Retrieval is deterministic: score descending, then `image_id` ascending as the tie-break. `embedding.retrieval_k` is configurable.
+Cosine similarity is calculated only from normalized vectors. Theme matches use the configurable `embedding.theme_similarity_threshold`. Retrieval is deterministic: score descending, then `image_id` ascending as the tie-break.
 
 Near-duplicate grouping uses image-image cosine similarity and the configurable `embedding.near_duplicate_similarity_threshold`. Pairwise matches are converted into deterministic connected components. Group IDs are deterministic hashes of the ordered image IDs. This is only near-duplicate detection; no Phase 7 evidence aggregation or recurrence scoring is performed.
 
