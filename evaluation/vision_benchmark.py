@@ -78,6 +78,19 @@ def _deterministic_rerun_status(
     return deterministic
 
 
+def _sample_iteration_count(
+    *,
+    sample_index: int,
+    iterations: int,
+    determinism_sample_count: int,
+) -> int:
+    if iterations < 2:
+        return 1
+    if sample_index < determinism_sample_count:
+        return iterations
+    return 1
+
+
 def _report_exit_code(report: Mapping[str, Any]) -> int:
     candidates = report.get("candidates")
     if not isinstance(candidates, Sequence):
@@ -631,12 +644,21 @@ async def run_vision_benchmark_async(
     max_observations_per_kind: int | None = None,
     max_label_chars: int | None = None,
     max_caption_chars: int | None = None,
+    determinism_sample_count: int = 3,
     skip_model_acquisition: bool = False,
     existing_runtime_base_url: str | None = None,
 ) -> dict[str, Any]:
     if iterations <= 0:
         raise ValueError(
             "iterations must be positive"
+        )
+    if (
+        isinstance(determinism_sample_count, bool)
+        or not isinstance(determinism_sample_count, int)
+        or determinism_sample_count <= 0
+    ):
+        raise ValueError(
+            "determinism_sample_count must be a positive integer"
         )
     if (
         not candidates
@@ -795,6 +817,11 @@ async def run_vision_benchmark_async(
         LlamaCppVisionSettings.from_config(config)
     )
     candidate_reports: list[dict[str, Any]] = []
+    effective_determinism_sample_count = (
+        min(determinism_sample_count, len(eval_samples))
+        if iterations >= 2
+        else 0
+    )
 
     for candidate in candidates:
         model_acquisition_time_ms: float | None = None
@@ -937,7 +964,7 @@ async def run_vision_benchmark_async(
             failed_samples = 0
             failure_reasons: dict[str, int] = {}
 
-            for sample in eval_samples:
+            for sample_index, sample in enumerate(eval_samples):
                 source_path = (
                     dataset_root
                     / sample.image.relative_path
@@ -999,8 +1026,15 @@ async def run_vision_benchmark_async(
                     ] = []
                     first_result = None
                     try:
+                        sample_iterations = _sample_iteration_count(
+                            sample_index=sample_index,
+                            iterations=iterations,
+                            determinism_sample_count=(
+                                effective_determinism_sample_count
+                            ),
+                        )
                         for iteration_index in range(
-                            iterations
+                            sample_iterations
                         ):
                             started = (
                                 time.perf_counter()
@@ -1020,13 +1054,14 @@ async def run_vision_benchmark_async(
                                 batch.images[0],
                                 provider_result,
                             )
-                            latencies_ms.append(
-                                (
-                                    time.perf_counter()
-                                    - started
+                            if iteration_index == 0:
+                                latencies_ms.append(
+                                    (
+                                        time.perf_counter()
+                                        - started
+                                    )
+                                    * 1000.0
                                 )
-                                * 1000.0
-                            )
                             signature = tuple(
                                 (
                                     item.type.value,
@@ -1288,6 +1323,9 @@ async def run_vision_benchmark_async(
                         if resource_monitor is None
                         else resource_monitor.peak_vram_mb
                     ),
+                    "determinism_sample_count": (
+                        effective_determinism_sample_count
+                    ),
                     "deterministic_rerun": (
                         _deterministic_rerun_status(
                             iterations,
@@ -1399,6 +1437,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=2,
     )
     parser.add_argument(
+        "--determinism-sample-count",
+        type=int,
+        default=3,
+    )
+    parser.add_argument(
         "--expected-manifest-fingerprint"
     )
     parser.add_argument(
@@ -1464,6 +1507,9 @@ def main(
                 args.candidate
             ),
             iterations=args.iterations,
+            determinism_sample_count=(
+                args.determinism_sample_count
+            ),
             expected_manifest_fingerprint=(
                 args.expected_manifest_fingerprint
             ),
