@@ -43,4 +43,3 @@ embedding:
   local_files_only: false
   theme_similarity_threshold: 0.25
   near_duplicate_similarity_threshold: 0.95
-  retrieval_k: 5
