@@ -95,13 +95,16 @@ def _report_exit_code(report: Mapping[str, Any]) -> int:
     candidates = report.get("candidates")
     if not isinstance(candidates, Sequence):
         return 2
+    valid_count = 0
     for candidate in candidates:
-        if (
-            isinstance(candidate, Mapping)
-            and candidate.get("benchmark_valid") is False
-        ):
+        if not isinstance(candidate, Mapping):
             return 2
-    return 0
+        if candidate.get("benchmark_valid") is True:
+            valid_count += 1
+            continue
+        if candidate.get("candidate_status") != "rejected_preflight":
+            return 2
+    return 0 if valid_count > 0 else 2
 
 
 @dataclass(frozen=True)
@@ -939,6 +942,148 @@ async def run_vision_benchmark_async(
             service = EvidenceExtractionService(
                 provider
             )
+            preflight_sample_id: str | None = None
+            preflight_latency_ms: float | None = None
+            run_preflight = (
+                existing_runtime_base_url is None
+                and len(candidates) > 1
+                and bool(eval_samples)
+            )
+            if run_preflight:
+                preflight_sample = eval_samples[0]
+                preflight_sample_id = preflight_sample.sample_id
+                preflight_source_path = (
+                    dataset_root
+                    / preflight_sample.image.relative_path
+                )
+                preflight_raw = RawImageInput(
+                    image_id=preflight_sample.image.image_id,
+                    filename=preflight_source_path.name,
+                    declared_mime_type=(
+                        _mime_from_path(preflight_source_path)
+                    ),
+                    content=preflight_source_path.read_bytes(),
+                )
+                preflight_request = ProfileAnalysisRequest(
+                    analysis_id=(
+                        f"phase5-{candidate.name}-preflight-"
+                        f"{preflight_sample.sample_id}"
+                    ),
+                    image_ids=(
+                        preflight_sample.image.image_id,
+                    ),
+                )
+                preflight_batch = await image_service.process_async(
+                    preflight_request,
+                    (preflight_raw,),
+                )
+                preflight_started = time.perf_counter()
+                try:
+                    try:
+                        preflight_provider_result = (
+                            await provider.extract_async(
+                                preflight_batch.images[0]
+                            )
+                        )
+                        service.normalize_result(
+                            preflight_batch.images[0],
+                            preflight_provider_result,
+                        )
+                    except Exception as exc:
+                        preflight_latency_ms = (
+                            time.perf_counter()
+                            - preflight_started
+                        ) * 1000.0
+                        reason = _sanitized_failure_reason(exc)
+                        model_sha256 = await asyncio.to_thread(
+                            _file_sha256_if_present,
+                            props.get("model_path"),
+                        )
+                        candidate_reports.append(
+                            {
+                                "candidate": candidate.name,
+                                "candidate_status": "rejected_preflight",
+                                "hf_model": candidate.hf_model,
+                                "provider": "llama_cpp",
+                                "provider_version": props.get(
+                                    "build_info"
+                                ),
+                                "model_path": props.get("model_path"),
+                                "model_sha256": model_sha256,
+                                "request_timeout_seconds": (
+                                    settings.request_timeout_seconds
+                                ),
+                                "max_tokens": settings.max_tokens,
+                                "max_observations_per_kind": (
+                                    settings.max_observations_per_kind
+                                ),
+                                "max_label_chars": (
+                                    settings.max_label_chars
+                                ),
+                                "max_caption_chars": (
+                                    settings.max_caption_chars
+                                ),
+                                "sample_count": len(eval_samples),
+                                "evaluated_sample_count": 0,
+                                "failed_sample_count": 1,
+                                "benchmark_valid": False,
+                                "failure_reasons": {reason: 1},
+                                "preflight_sample_id": (
+                                    preflight_sample_id
+                                ),
+                                "preflight_latency_ms": (
+                                    preflight_latency_ms
+                                ),
+                                "evaluated_label_types": [],
+                                "precision": None,
+                                "recall": None,
+                                "f1": None,
+                                "unsupported_claim_rate_pre_policy": (
+                                    None
+                                ),
+                                "unsupported_claim_rate_post_validation": (
+                                    None
+                                ),
+                                "p50_latency_ms": None,
+                                "p95_latency_ms": None,
+                                "model_acquisition_time_ms": (
+                                    model_acquisition_time_ms
+                                ),
+                                "model_acquisition_skipped": (
+                                    skip_model_acquisition
+                                    or using_existing_runtime
+                                ),
+                                "existing_runtime_reused": (
+                                    using_existing_runtime
+                                ),
+                                "model_load_time_ms": (
+                                    model_load_time_ms
+                                ),
+                                "runtime_peak_ram_mb": (
+                                    None
+                                    if resource_monitor is None
+                                    else resource_monitor.peak_ram_mb
+                                ),
+                                "vram_peak_mb": (
+                                    None
+                                    if resource_monitor is None
+                                    else resource_monitor.peak_vram_mb
+                                ),
+                                "determinism_sample_count": 0,
+                                "deterministic_rerun": None,
+                                "per_label_type": {},
+                            }
+                        )
+                        continue
+                    preflight_latency_ms = (
+                        time.perf_counter()
+                        - preflight_started
+                    ) * 1000.0
+                finally:
+                    await image_service.release_async(
+                        preflight_batch
+                    )
+
             latencies_ms: list[float] = []
             expected_by_type: dict[
                 str,
@@ -1227,6 +1372,7 @@ async def run_vision_benchmark_async(
             candidate_reports.append(
                 {
                     "candidate": candidate.name,
+                    "candidate_status": "evaluated",
                     "hf_model": candidate.hf_model,
                     "provider": "llama_cpp",
                     "provider_version": (
@@ -1247,6 +1393,15 @@ async def run_vision_benchmark_async(
                     "max_caption_chars": settings.max_caption_chars,
                     "sample_count": len(
                         eval_samples
+                    ),
+                    "evaluated_sample_count": len(
+                        eval_samples
+                    ),
+                    "preflight_sample_id": (
+                        preflight_sample_id
+                    ),
+                    "preflight_latency_ms": (
+                        preflight_latency_ms
                     ),
                     "failed_sample_count": (
                         failed_samples
