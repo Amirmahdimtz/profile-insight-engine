@@ -14,6 +14,7 @@ from evaluation.vision_benchmark import (
     _provider_claims,
     _report_exit_code,
     _runtime_command,
+    _sample_iteration_count,
     _sanitized_failure_reason,
     _wait_for_health,
     audit_visual_label_coverage,
@@ -48,6 +49,8 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
                 "qwen=repo:model",
                 "--iterations",
                 "1",
+                "--determinism-sample-count",
+                "3",
                 "--request-timeout-seconds",
                 "300",
                 "--max-tokens",
@@ -62,6 +65,7 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
                 "report.json",
             ]
         )
+        self.assertEqual(args.determinism_sample_count, 3)
         self.assertEqual(args.request_timeout_seconds, 300)
         self.assertEqual(args.max_tokens, 256)
         self.assertEqual(args.max_observations_per_kind, 1)
@@ -223,6 +227,40 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertFalse(
             _deterministic_rerun_status(2, False)
+        )
+
+    def test_determinism_reruns_are_limited_to_fixed_subset(self):
+        self.assertEqual(
+            _sample_iteration_count(
+                sample_index=0,
+                iterations=2,
+                determinism_sample_count=3,
+            ),
+            2,
+        )
+        self.assertEqual(
+            _sample_iteration_count(
+                sample_index=2,
+                iterations=2,
+                determinism_sample_count=3,
+            ),
+            2,
+        )
+        self.assertEqual(
+            _sample_iteration_count(
+                sample_index=3,
+                iterations=2,
+                determinism_sample_count=3,
+            ),
+            1,
+        )
+        self.assertEqual(
+            _sample_iteration_count(
+                sample_index=0,
+                iterations=1,
+                determinism_sample_count=3,
+            ),
+            1,
         )
 
     async def test_fingerprint_mismatch_fails_before_runtime_start(
