@@ -107,7 +107,7 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
                 }
             )
 
-    def test_request_uses_llama_cpp_json_schema_wrapper(self):
+    def test_request_uses_llama_cpp_native_json_schema_shape(self):
         provider = LlamaCppVisionProvider(
             object(),
             _settings(),
@@ -133,15 +133,9 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
             response_format["type"],
             "json_schema",
         )
+        self.assertNotIn("json_schema", response_format)
         self.assertEqual(
-            response_format["json_schema"]["name"],
-            "phase5_visual_evidence",
-        )
-        self.assertTrue(
-            response_format["json_schema"]["strict"]
-        )
-        self.assertEqual(
-            response_format["json_schema"]["schema"],
+            response_format["schema"],
             __import__(
                 "src.infrastructure.providers.vision.llama_cpp_vision_provider",
                 fromlist=["_OUTPUT_SCHEMA"],
@@ -158,6 +152,24 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
                 {
                     "choices": [
                         {"message": {"content": "not json"}}
+                    ]
+                }
+            )
+
+    def test_completion_payload_reports_token_truncation(self):
+        with self.assertRaisesRegex(
+            VisionProviderError,
+            "truncated at the token limit",
+        ):
+            LlamaCppVisionProvider._parse_completion_payload(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {
+                                "content": '{"scenes":['
+                            },
+                        }
                     ]
                 }
             )
