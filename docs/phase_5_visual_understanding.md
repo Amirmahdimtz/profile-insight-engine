@@ -129,23 +129,55 @@ Install Python dependencies already pinned by the repository:
 python -m pip install -r requirements.txt
 ```
 
-Install/verify llama.cpp. The benchmark uses the `llama-server` executable directly.
+Install/verify llama.cpp. The benchmark uses the `llama-server` executable directly. WinGet installs it as a portable package, so verification resolves the actual executable path instead of depending only on PATH propagation.
 
 ```powershell
-$LlamaServer = Get-Command llama-server -ErrorAction SilentlyContinue
-if (-not $LlamaServer) {
-    winget install llama.cpp
-    if ($LASTEXITCODE -ne 0) { throw "llama.cpp installation failed" }
+$LlamaServerCommand = Get-Command llama-server -ErrorAction SilentlyContinue
 
-    Write-Host "llama.cpp was installed. Close this PowerShell window, open a new PowerShell session, return to the repository root, restore the environment variables above, and continue with the verification commands."
-    return
+if ($LlamaServerCommand) {
+    $env:LLAMA_SERVER_EXE = $LlamaServerCommand.Source
+} else {
+    $WinGetCandidates = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\llama-server.exe"),
+        "C:\Program Files\WinGet\Links\llama-server.exe",
+        "C:\Program Files (x86)\WinGet\Links\llama-server.exe"
+    )
+
+    $env:LLAMA_SERVER_EXE = $WinGetCandidates |
+        Where-Object { Test-Path $_ -PathType Leaf } |
+        Select-Object -First 1
+
+    if (-not $env:LLAMA_SERVER_EXE) {
+        $WinGetRoots = @(
+            (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"),
+            "C:\Program Files\WinGet\Packages",
+            "C:\Program Files (x86)\WinGet\Packages"
+        ) | Where-Object { Test-Path $_ -PathType Container }
+
+        $env:LLAMA_SERVER_EXE = $WinGetRoots |
+            ForEach-Object {
+                Get-ChildItem -Path $_ -Filter "llama-server.exe" -File -Recurse -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -match "ggml\.llamacpp" } |
+                    Select-Object -ExpandProperty FullName
+            } |
+            Select-Object -First 1
+    }
 }
 
-llama-server --version
+if (-not $env:LLAMA_SERVER_EXE) {
+    throw "llama-server.exe could not be resolved. Verify the ggml.llamacpp WinGet installation."
+}
+if (-not (Test-Path $env:LLAMA_SERVER_EXE -PathType Leaf)) {
+    throw "Resolved llama-server executable does not exist: $env:LLAMA_SERVER_EXE"
+}
+
+& $env:LLAMA_SERVER_EXE --version
 if ($LASTEXITCODE -ne 0) { throw "llama-server version check failed" }
+
+Write-Host "Resolved llama-server: $env:LLAMA_SERVER_EXE"
 ```
 
-Do not treat `Get-Command llama-server` failing immediately after a successful `winget install` in the same PowerShell session as an installation failure. Winget updates PATH for future shells; reopen PowerShell before continuing.
+The explicit executable path is a local verification input only; no machine-specific path is committed to application config.
 
 Detect NVIDIA GPU availability without assuming CUDA/GPU support. The llama.cpp provider can run on CPU; GPU usage is not a Phase 5 prerequisite.
 
@@ -162,13 +194,15 @@ The `-hf` model specs used by the benchmark download/cache weights through llama
 
 ## Local verification commands
 
-Before compile/tests, confirm the synchronized commit and runtime:
+Before compile/tests, confirm the synchronized commit and resolved runtime:
 
 ```powershell
 git status --short
 git rev-parse HEAD
-Get-Command llama-server -ErrorAction Stop
-llama-server --version
+if (-not $env:LLAMA_SERVER_EXE) { throw "LLAMA_SERVER_EXE is not set. Run the llama.cpp resolver above first." }
+if (-not (Test-Path $env:LLAMA_SERVER_EXE -PathType Leaf)) { throw "Resolved llama-server executable does not exist: $env:LLAMA_SERVER_EXE" }
+& $env:LLAMA_SERVER_EXE --version
+if ($LASTEXITCODE -ne 0) { throw "llama-server version check failed" }
 ```
 
 An untracked `phase4_ocr_benchmark.json` is allowed and does not invalidate Phase 5 verification. Do not delete it solely to make `git status` empty.
@@ -199,6 +233,7 @@ python -m evaluation.vision_benchmark `
   --iterations 2 `
   --expected-manifest-fingerprint "$env:EXPECTED_MANIFEST_FINGERPRINT" `
   --expected-dataset-content-fingerprint "$env:EXPECTED_DATASET_CONTENT_FINGERPRINT" `
+  --runtime-executable "$env:LLAMA_SERVER_EXE" `
   --output "$env:PHASE5_REPORT"
 if ($LASTEXITCODE -ne 0) { throw "Phase 5 benchmark failed" }
 ```
