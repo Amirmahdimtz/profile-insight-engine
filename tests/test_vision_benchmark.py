@@ -8,6 +8,7 @@ from evaluation.common import DatasetSlice, DatasetSplit, EvaluationLabelType
 from evaluation.metrics import unsupported_claim_rate
 from evaluation.vision_benchmark import (
     _benchmark_label,
+    _build_parser,
     _parse_candidate,
     _deterministic_rerun_status,
     _provider_claims,
@@ -35,6 +36,28 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Qwen2.5-VL-3B", candidate.hf_model)
         with self.assertRaises(argparse.ArgumentTypeError):
             _parse_candidate("broken")
+
+    def test_cli_accepts_benchmark_inference_overrides(self):
+        args = _build_parser().parse_args(
+            [
+                "--manifest",
+                "manifest.json",
+                "--dataset-root",
+                ".",
+                "--candidate",
+                "qwen=repo:model",
+                "--iterations",
+                "1",
+                "--request-timeout-seconds",
+                "300",
+                "--max-tokens",
+                "256",
+                "--output",
+                "report.json",
+            ]
+        )
+        self.assertEqual(args.request_timeout_seconds, 300)
+        self.assertEqual(args.max_tokens, 256)
 
     def test_benchmark_label_normalization_is_case_and_whitespace_stable(
         self,
