@@ -256,7 +256,7 @@ def _wait_for_health(
                         time.perf_counter() - started
                     ) * 1000.0
         except (
-            urllib.error.URLError,
+            OSError,
             TimeoutError,
             json.JSONDecodeError,
             UnicodeError,
