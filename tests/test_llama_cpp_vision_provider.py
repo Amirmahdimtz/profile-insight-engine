@@ -131,7 +131,7 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
                 max_caption_chars=160,
             )
 
-    def test_request_uses_llama_cpp_native_json_schema_shape(self):
+    def test_request_uses_llama_cpp_top_level_json_schema_grammar_path(self):
         provider = LlamaCppVisionProvider(
             object(),
             _settings(),
@@ -155,10 +155,10 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
         response_format = captured["response_format"]
         self.assertEqual(
             response_format["type"],
-            "json_schema",
+            "json_object",
         )
-        self.assertNotIn("json_schema", response_format)
-        schema = response_format["schema"]
+        self.assertNotIn("schema", response_format)
+        schema = captured["json_schema"]
         self.assertEqual(
             schema["properties"]["objects"]["maxItems"],
             3,
