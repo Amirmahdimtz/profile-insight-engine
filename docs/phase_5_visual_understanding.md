@@ -90,10 +90,11 @@ For each candidate it records, where measurable:
 - model load time measured from a second offline startup after acquisition;
 - sampled llama.cpp process RAM peak;
 - sampled NVIDIA process VRAM peak when `nvidia-smi` is available, otherwise `null`;
-- deterministic rerun status;
+- deterministic rerun status (`null` when fewer than two iterations are requested);
+- sanitized per-candidate failure reasons and a `benchmark_valid` flag;
 - visual-label coverage and missing-annotation gaps.
 
-Candidate processes are run sequentially with the same dataset, decode settings, iterations, and metric configuration. Before measurement, each candidate is started once with network-enabled `-hf` so llama.cpp can populate `LLAMA_CACHE` with the model and multimodal projector. That acquisition/warm-up has its own configurable timeout. The measured server is then restarted with `--offline`; therefore `model_load_time_ms` excludes network download time and represents local cached startup. Failed samples remain in the expected-label denominator so provider failures cannot artificially improve recall.
+Candidate processes are run sequentially with the same dataset, decode settings, iterations, and metric configuration. Before measurement, each candidate is started once with network-enabled `-hf` so llama.cpp can populate `LLAMA_CACHE` with the model and multimodal projector. That acquisition/warm-up has its own configurable timeout. The measured server is then restarted with `--offline`; therefore `model_load_time_ms` excludes network download time and represents local cached startup. Failed samples remain in the expected-label denominator so provider failures cannot artificially improve recall. If every eval sample fails for a candidate, the report is still written with sanitized failure reasons, `benchmark_valid` is false, and the CLI exits non-zero.
 
 ## Windows local verification prerequisites
 
