@@ -83,8 +83,6 @@ class SemanticThemeService:
         duplicate_threshold = _read_similarity(
             self._config_reader, "embedding.near_duplicate_similarity_threshold"
         )
-        retrieval_k = self._config_reader.get_positive_int("embedding.retrieval_k")
-
         similarities: list[ThemeSimilarityEvidence] = []
         retrieval: list[SemanticRetrievalResult] = []
         image_vectors = {vector.item_id: vector.values for vector in image_batch.vectors}
@@ -104,12 +102,11 @@ class SemanticThemeService:
                 )
                 ranked.append((image_id, score))
             ranked.sort(key=lambda item: (-item[1], item[0]))
-            limited = ranked[: min(retrieval_k, len(ranked))]
             retrieval.append(
                 SemanticRetrievalResult(
                     query_label=label,
-                    ranked_image_ids=tuple(item[0] for item in limited),
-                    scores=tuple(item[1] for item in limited),
+                    ranked_image_ids=tuple(item[0] for item in ranked),
+                    scores=tuple(item[1] for item in ranked),
                 )
             )
 
