@@ -375,6 +375,13 @@ class LlamaCppVisionProvider(IVisionProvider):
         image_bytes: bytes,
     ) -> Mapping[str, Any]:
         encoded_image = base64.b64encode(image_bytes).decode("ascii")
+        output_schema = _output_schema(
+            max_observations_per_kind=(
+                self._settings.max_observations_per_kind
+            ),
+            max_label_chars=self._settings.max_label_chars,
+            max_caption_chars=self._settings.max_caption_chars,
+        )
         payload = {
             "model": self._settings.model_id,
             "messages": [
@@ -410,15 +417,9 @@ class LlamaCppVisionProvider(IVisionProvider):
             "max_tokens": self._settings.max_tokens,
             "stream": False,
             "response_format": {
-                "type": "json_schema",
-                "schema": _output_schema(
-                    max_observations_per_kind=(
-                        self._settings.max_observations_per_kind
-                    ),
-                    max_label_chars=self._settings.max_label_chars,
-                    max_caption_chars=self._settings.max_caption_chars,
-                ),
+                "type": "json_object",
             },
+            "json_schema": output_schema,
         }
         request = urllib.request.Request(
             f"{self._settings.base_url}/v1/chat/completions",
