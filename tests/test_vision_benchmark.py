@@ -9,14 +9,18 @@ from evaluation.metrics import unsupported_claim_rate
 from evaluation.vision_benchmark import (
     _benchmark_label,
     _parse_candidate,
+    _deterministic_rerun_status,
     _provider_claims,
+    _report_exit_code,
     _runtime_command,
+    _sanitized_failure_reason,
     _wait_for_health,
     audit_visual_label_coverage,
     run_vision_benchmark_async,
 )
 from src.core.profile_analysis.vision_contracts import (
     VisionEvidenceKind,
+    VisionProviderError,
     VisionObservation,
     VisionProviderResult,
 )
@@ -97,6 +101,57 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreaterEqual(elapsed_ms, 0.0)
         self.assertEqual(process.poll.call_count, 2)
+
+    def test_failure_reason_is_sanitized_and_fatal_report_is_nonzero(
+        self,
+    ):
+        self.assertEqual(
+            _sanitized_failure_reason(
+                VisionProviderError(
+                    "llama.cpp vision request failed"
+                )
+            ),
+            "VisionProviderError: llama.cpp vision request failed",
+        )
+        self.assertEqual(
+            _sanitized_failure_reason(
+                RuntimeError("raw provider content must not leak")
+            ),
+            "RuntimeError",
+        )
+        self.assertEqual(
+            _report_exit_code(
+                {
+                    "candidates": [
+                        {"benchmark_valid": False},
+                    ]
+                }
+            ),
+            2,
+        )
+        self.assertEqual(
+            _report_exit_code(
+                {
+                    "candidates": [
+                        {"benchmark_valid": True},
+                    ]
+                }
+            ),
+            0,
+        )
+
+    def test_single_iteration_does_not_claim_deterministic_rerun(
+        self,
+    ):
+        self.assertIsNone(
+            _deterministic_rerun_status(1, True)
+        )
+        self.assertTrue(
+            _deterministic_rerun_status(2, True)
+        )
+        self.assertFalse(
+            _deterministic_rerun_status(2, False)
+        )
 
     async def test_fingerprint_mismatch_fails_before_runtime_start(
         self,
