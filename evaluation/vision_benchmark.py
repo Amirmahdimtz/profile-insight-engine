@@ -628,6 +628,9 @@ async def run_vision_benchmark_async(
     model_acquisition_timeout_seconds: int | None = None,
     request_timeout_seconds: int | None = None,
     max_tokens: int | None = None,
+    max_observations_per_kind: int | None = None,
+    max_label_chars: int | None = None,
+    max_caption_chars: int | None = None,
     skip_model_acquisition: bool = False,
     existing_runtime_base_url: str | None = None,
 ) -> dict[str, Any]:
@@ -717,6 +720,9 @@ async def run_vision_benchmark_async(
     for field_name, value in (
         ("request_timeout_seconds", request_timeout_seconds),
         ("max_tokens", max_tokens),
+        ("max_observations_per_kind", max_observations_per_kind),
+        ("max_label_chars", max_label_chars),
+        ("max_caption_chars", max_caption_chars),
     ):
         if value is not None and (
             isinstance(value, bool)
@@ -881,10 +887,17 @@ async def run_vision_benchmark_async(
                     or base_settings.max_tokens
                 ),
                 max_observations_per_kind=(
-                    base_settings.max_observations_per_kind
+                    max_observations_per_kind
+                    or base_settings.max_observations_per_kind
                 ),
-                max_label_chars=base_settings.max_label_chars,
-                max_caption_chars=base_settings.max_caption_chars,
+                max_label_chars=(
+                    max_label_chars
+                    or base_settings.max_label_chars
+                ),
+                max_caption_chars=(
+                    max_caption_chars
+                    or base_settings.max_caption_chars
+                ),
                 temperature=base_settings.temperature,
                 top_p=base_settings.top_p,
                 seed=base_settings.seed,
@@ -1415,6 +1428,18 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
     )
     parser.add_argument(
+        "--max-observations-per-kind",
+        type=int,
+    )
+    parser.add_argument(
+        "--max-label-chars",
+        type=int,
+    )
+    parser.add_argument(
+        "--max-caption-chars",
+        type=int,
+    )
+    parser.add_argument(
         "--existing-runtime-base-url",
     )
     parser.add_argument(
@@ -1458,6 +1483,11 @@ def main(
                 args.request_timeout_seconds
             ),
             max_tokens=args.max_tokens,
+            max_observations_per_kind=(
+                args.max_observations_per_kind
+            ),
+            max_label_chars=args.max_label_chars,
+            max_caption_chars=args.max_caption_chars,
             skip_model_acquisition=(
                 args.skip_model_acquisition
             ),
