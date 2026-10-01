@@ -7,7 +7,7 @@ It produces observable `scene`, `object`, `activity`, `topic`, and a short factu
 
 ## Contract and architecture
 
-`IVisionProvider` is a real replaceable provider boundary because the local runtime/model is benchmarkable and replaceable. `LlamaCppVisionProvider` is the concrete Infrastructure implementation. `EvidenceExtractionService` is the Core orchestration/normalization boundary and depends only on `IVisionProvider` plus provider-neutral Phase 5 contracts.
+`IVisionProvider` is a real replaceable provider boundary because the local runtime/model is benchmarkable and replaceable. `LlamaCppVisionProvider` is the concrete Infrastructure implementation. Its structured-output request uses llama.cpp server's native `response_format.type=json_schema` plus direct `response_format.schema`; provider validation remains fail-closed if the runtime returns malformed or truncated JSON. `EvidenceExtractionService` is the Core orchestration/normalization boundary and depends only on `IVisionProvider` plus provider-neutral Phase 5 contracts.
 
 DI follows the existing discovery mechanism: `@inject` on the concrete provider and Core service, constructor injection, and no feature-specific manual registration.
 
