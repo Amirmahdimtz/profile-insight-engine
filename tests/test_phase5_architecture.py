@@ -196,14 +196,22 @@ class Phase5ArchitectureTests(unittest.TestCase):
             documentation,
         )
         self.assertIn(
-            "Close this PowerShell window",
+            "Microsoft\\WinGet\\Links\\llama-server.exe",
             documentation,
         )
         self.assertIn(
-            "Winget updates PATH for future shells",
+            "Microsoft\\WinGet\\Packages",
             documentation,
         )
         self.assertIn(
+            "$env:LLAMA_SERVER_EXE",
+            documentation,
+        )
+        self.assertIn(
+            '--runtime-executable "$env:LLAMA_SERVER_EXE"',
+            documentation,
+        )
+        self.assertNotIn(
             "Get-Command llama-server -ErrorAction Stop",
             documentation,
         )
