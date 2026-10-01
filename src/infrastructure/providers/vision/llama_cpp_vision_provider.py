@@ -357,11 +357,7 @@ class LlamaCppVisionProvider(IVisionProvider):
             "stream": False,
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "phase5_visual_evidence",
-                    "strict": True,
-                    "schema": _OUTPUT_SCHEMA,
-                },
+                "schema": _OUTPUT_SCHEMA,
             },
         }
         request = urllib.request.Request(
@@ -397,6 +393,7 @@ class LlamaCppVisionProvider(IVisionProvider):
             raise VisionProviderError(
                 "llama.cpp completion choice is invalid"
             )
+        finish_reason = choice.get("finish_reason")
         message = choice.get("message")
         if not isinstance(message, Mapping):
             raise VisionProviderError(
@@ -410,6 +407,11 @@ class LlamaCppVisionProvider(IVisionProvider):
         try:
             structured = json.loads(content)
         except json.JSONDecodeError as exc:
+            if finish_reason == "length":
+                raise VisionProviderError(
+                    "llama.cpp structured content was truncated "
+                    "at the token limit"
+                ) from exc
             raise VisionProviderError(
                 "llama.cpp structured content is not valid JSON"
             ) from exc
