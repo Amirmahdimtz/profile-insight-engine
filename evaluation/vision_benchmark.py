@@ -169,6 +169,58 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _runtime_command(
+    runtime_executable: str,
+    candidate: CandidateSpec,
+    port: int,
+    *,
+    offline: bool,
+) -> list[str]:
+    command = [
+        runtime_executable,
+        "-hf",
+        candidate.hf_model,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--log-disable",
+    ]
+    if offline:
+        command.append("--offline")
+    return command
+
+
+def _start_runtime(
+    command: Sequence[str],
+) -> subprocess.Popen[bytes]:
+    try:
+        return subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "llama.cpp runtime executable was not found"
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            "llama.cpp runtime could not be started"
+        ) from exc
+
+
+def _stop_runtime(
+    process: subprocess.Popen[bytes],
+) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
+
+
 def _wait_for_health(
     base_url: str,
     timeout_seconds: int,
@@ -536,6 +588,7 @@ async def run_vision_benchmark_async(
     expected_dataset_content_fingerprint: str | None,
     runtime_executable: str | None,
     startup_timeout_seconds: int | None,
+    model_acquisition_timeout_seconds: int | None = None,
 ) -> dict[str, Any]:
     if iterations <= 0:
         raise ValueError(
@@ -572,6 +625,21 @@ async def run_vision_benchmark_async(
     ):
         raise ValueError(
             "startup_timeout_seconds must be a "
+            "positive integer when provided"
+        )
+    if model_acquisition_timeout_seconds is not None and (
+        isinstance(
+            model_acquisition_timeout_seconds,
+            bool,
+        )
+        or not isinstance(
+            model_acquisition_timeout_seconds,
+            int,
+        )
+        or model_acquisition_timeout_seconds <= 0
+    ):
+        raise ValueError(
+            "model_acquisition_timeout_seconds must be a "
             "positive integer when provided"
         )
 
@@ -622,6 +690,12 @@ async def run_vision_benchmark_async(
             "vision.startup_timeout_seconds"
         )
     )
+    model_acquisition_timeout_seconds = (
+        model_acquisition_timeout_seconds
+        or config.get_positive_int(
+            "vision.model_acquisition_timeout_seconds"
+        )
+    )
     image_service = ImageProcessingService(
         config,
         LocalImageStorage(),
@@ -632,32 +706,40 @@ async def run_vision_benchmark_async(
     candidate_reports: list[dict[str, Any]] = []
 
     for candidate in candidates:
+        acquisition_port = _free_port()
+        acquisition_base_url = (
+            f"http://127.0.0.1:{acquisition_port}"
+        )
+        acquisition_process = _start_runtime(
+            _runtime_command(
+                runtime_executable,
+                candidate,
+                acquisition_port,
+                offline=False,
+            )
+        )
+        try:
+            model_acquisition_time_ms = (
+                await asyncio.to_thread(
+                    _wait_for_health,
+                    acquisition_base_url,
+                    model_acquisition_timeout_seconds,
+                    acquisition_process,
+                )
+            )
+        finally:
+            _stop_runtime(acquisition_process)
+
         port = _free_port()
         base_url = f"http://127.0.0.1:{port}"
-        command = [
-            runtime_executable,
-            "-hf",
-            candidate.hf_model,
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-            "--log-disable",
-        ]
-        try:
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+        process = _start_runtime(
+            _runtime_command(
+                runtime_executable,
+                candidate,
+                port,
+                offline=True,
             )
-        except FileNotFoundError as exc:
-            raise RuntimeError(
-                "llama.cpp runtime executable was not found"
-            ) from exc
-        except OSError as exc:
-            raise RuntimeError(
-                "llama.cpp runtime could not be started"
-            ) from exc
+        )
         resource_monitor = _RuntimeResourceMonitor(
             process.pid
         )
@@ -1032,6 +1114,9 @@ async def run_vision_benchmark_async(
                         if latencies_ms
                         else None
                     ),
+                    "model_acquisition_time_ms": (
+                        model_acquisition_time_ms
+                    ),
                     "model_load_time_ms": (
                         model_load_time_ms
                     ),
@@ -1051,12 +1136,7 @@ async def run_vision_benchmark_async(
             )
         finally:
             resource_monitor.stop()
-            process.terminate()
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=10)
+            _stop_runtime(process)
 
     return {
         "schema_version": "1.0.0",
@@ -1087,6 +1167,17 @@ async def run_vision_benchmark_async(
                 "Phase 1 observable-claim policy; "
                 "provider-policy rejections are counted "
                 "in failed_sample_count"
+            ),
+            "model_acquisition_time_ms": (
+                "network-enabled llama.cpp -hf warm-up "
+                "used to populate the configured cache before "
+                "measured startup; includes download and initial "
+                "load work when the candidate is not cached"
+            ),
+            "model_load_time_ms": (
+                "measured on a second llama.cpp startup with "
+                "--offline after acquisition succeeds, so network "
+                "download time is excluded"
             ),
             "runtime_peak_ram_mb": (
                 "llama.cpp process working-set/RSS "
@@ -1146,6 +1237,10 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
     )
     parser.add_argument(
+        "--model-acquisition-timeout-seconds",
+        type=int,
+    )
+    parser.add_argument(
         "--output",
         required=True,
     )
@@ -1178,6 +1273,9 @@ def main(
             ),
             startup_timeout_seconds=(
                 args.startup_timeout_seconds
+            ),
+            model_acquisition_timeout_seconds=(
+                args.model_acquisition_timeout_seconds
             ),
         )
     )
