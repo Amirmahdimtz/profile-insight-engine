@@ -9,6 +9,7 @@ from evaluation.vision_benchmark import (
     _benchmark_label,
     _parse_candidate,
     _provider_claims,
+    _runtime_command,
     audit_visual_label_coverage,
     run_vision_benchmark_async,
 )
@@ -34,6 +35,35 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
     ):
         self.assertEqual(_benchmark_label("  Dog  "), "dog")
         self.assertEqual(_benchmark_label("DOG"), "dog")
+
+    def test_runtime_command_separates_acquisition_from_measured_load(
+        self,
+    ):
+        candidate = _parse_candidate(
+            "qwen3b=ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M"
+        )
+        acquisition = _runtime_command(
+            "llama-server",
+            candidate,
+            1234,
+            offline=False,
+        )
+        measured = _runtime_command(
+            "llama-server",
+            candidate,
+            1234,
+            offline=True,
+        )
+        self.assertNotIn("--offline", acquisition)
+        self.assertIn("--offline", measured)
+        self.assertEqual(
+            acquisition[:3],
+            [
+                "llama-server",
+                "-hf",
+                candidate.hf_model,
+            ],
+        )
 
     async def test_fingerprint_mismatch_fails_before_runtime_start(
         self,
