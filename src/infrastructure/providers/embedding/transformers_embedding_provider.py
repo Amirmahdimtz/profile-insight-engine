@@ -203,7 +203,12 @@ class TransformersEmbeddingProvider(IEmbeddingProvider):
         for start in range(0, len(texts), self._batch_size):
             batch = texts[start : start + self._batch_size]
             try:
-                inputs = self._processor(text=list(batch), padding=True, return_tensors="pt")
+                inputs = self._processor(
+                    text=list(batch),
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                )
                 inputs = {name: value.to(self._device) for name, value in inputs.items()}
                 with self._torch.inference_mode():
                     features = _feature_tensor(self._model.get_text_features(**inputs))
