@@ -181,9 +181,9 @@ class TransformersEmbeddingProvider(IEmbeddingProvider):
                     path = Path(item.storage_reference)
                     if not path.is_file():
                         raise EmbeddingProviderError("canonical image storage reference is unavailable")
-                    image = Image.open(path)
-                    image.load()
-                    opened.append(image.convert("RGB"))
+                    with Image.open(path) as source:
+                        source.load()
+                        opened.append(source.convert("RGB"))
                 inputs = self._processor(images=opened, return_tensors="pt")
                 inputs = {name: value.to(self._device) for name, value in inputs.items()}
                 with self._torch.inference_mode():
