@@ -24,50 +24,73 @@ from src.infrastructure.di.inject import inject
 from src.infrastructure.utils.config_reader import ConfigReader
 
 
-def _observation_schema() -> dict[str, Any]:
+def _observation_schema(
+    *,
+    max_items: int,
+    max_label_chars: int,
+) -> dict[str, Any]:
     return {
         "type": "array",
+        "maxItems": max_items,
         "items": {
             "type": "object",
             "additionalProperties": False,
             "required": ["label", "confidence"],
             "properties": {
-                "label": {"type": "string", "minLength": 1},
+                "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": max_label_chars,
+                },
                 "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
             },
         },
     }
 
 
-_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["scenes", "objects", "activities", "topics", "caption"],
-    "properties": {
-        "scenes": _observation_schema(),
-        "objects": _observation_schema(),
-        "activities": _observation_schema(),
-        "topics": _observation_schema(),
-        "caption": {
-            "anyOf": [
-                {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["text", "confidence"],
-                    "properties": {
-                        "text": {"type": "string", "minLength": 1},
-                        "confidence": {
-                            "type": "number",
-                            "minimum": 0.0,
-                            "maximum": 1.0,
+def _output_schema(
+    *,
+    max_observations_per_kind: int,
+    max_label_chars: int,
+    max_caption_chars: int,
+) -> dict[str, Any]:
+    observation_schema = _observation_schema(
+        max_items=max_observations_per_kind,
+        max_label_chars=max_label_chars,
+    )
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["scenes", "objects", "activities", "topics", "caption"],
+        "properties": {
+            "scenes": observation_schema,
+            "objects": observation_schema,
+            "activities": observation_schema,
+            "topics": observation_schema,
+            "caption": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["text", "confidence"],
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": max_caption_chars,
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
                         },
                     },
-                },
-                {"type": "null"},
-            ]
+                    {"type": "null"},
+                ]
+            },
         },
-    },
-}
+    }
 
 _SYSTEM_PROMPT = (
     "Extract only directly observable visual evidence from the supplied image. "
@@ -118,6 +141,9 @@ class LlamaCppVisionSettings:
     model_version: str
     config_version: str
     max_tokens: int
+    max_observations_per_kind: int
+    max_label_chars: int
+    max_caption_chars: int
     temperature: float
     top_p: float
     seed: int
@@ -149,11 +175,21 @@ class LlamaCppVisionSettings:
                 field_name,
                 _require_text(getattr(self, field_name), f"vision.{field_name}"),
             )
-        object.__setattr__(
-            self,
+        for field_name in (
             "max_tokens",
-            _require_int(self.max_tokens, "vision.max_tokens", minimum=1),
-        )
+            "max_observations_per_kind",
+            "max_label_chars",
+            "max_caption_chars",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _require_int(
+                    getattr(self, field_name),
+                    f"vision.{field_name}",
+                    minimum=1,
+                ),
+            )
         object.__setattr__(
             self,
             "temperature",
@@ -193,6 +229,15 @@ class LlamaCppVisionSettings:
             model_version=config_reader.get_non_empty_string("vision.model_version"),
             config_version=config_reader.get_non_empty_string("vision.config_version"),
             max_tokens=config_reader.get_positive_int("vision.max_tokens"),
+            max_observations_per_kind=config_reader.get_positive_int(
+                "vision.max_observations_per_kind"
+            ),
+            max_label_chars=config_reader.get_positive_int(
+                "vision.max_label_chars"
+            ),
+            max_caption_chars=config_reader.get_positive_int(
+                "vision.max_caption_chars"
+            ),
             temperature=config_reader.get("vision.temperature"),
             top_p=config_reader.get("vision.top_p"),
             seed=config_reader.get("vision.seed"),
@@ -230,7 +275,14 @@ class LlamaCppVisionProvider(IVisionProvider):
                 image_bytes,
             )
             structured = self._parse_completion_payload(payload)
-            observations, caption = self._parse_structured_output(structured)
+            observations, caption = self._parse_structured_output(
+                structured,
+                max_observations_per_kind=(
+                    self._settings.max_observations_per_kind
+                ),
+                max_label_chars=self._settings.max_label_chars,
+                max_caption_chars=self._settings.max_caption_chars,
+            )
         except VisionProviderError:
             raise
         except (
@@ -335,7 +387,9 @@ class LlamaCppVisionProvider(IVisionProvider):
                             "text": (
                                 "Return scene, object, activity, topic observations "
                                 "and one optional short factual caption using exactly "
-                                "the requested JSON schema."
+                                "the requested JSON schema. Return no more than "
+                                f"{self._settings.max_observations_per_kind} items "
+                                "per observation category."
                             ),
                         },
                         {
@@ -357,7 +411,13 @@ class LlamaCppVisionProvider(IVisionProvider):
             "stream": False,
             "response_format": {
                 "type": "json_schema",
-                "schema": _OUTPUT_SCHEMA,
+                "schema": _output_schema(
+                    max_observations_per_kind=(
+                        self._settings.max_observations_per_kind
+                    ),
+                    max_label_chars=self._settings.max_label_chars,
+                    max_caption_chars=self._settings.max_caption_chars,
+                ),
             },
         }
         request = urllib.request.Request(
@@ -425,6 +485,10 @@ class LlamaCppVisionProvider(IVisionProvider):
     def _parse_structured_output(
         cls,
         payload: Mapping[str, Any],
+        *,
+        max_observations_per_kind: int | None = None,
+        max_label_chars: int | None = None,
+        max_caption_chars: int | None = None,
     ) -> tuple[tuple[VisionObservation, ...], VisionCaption | None]:
         required = {
             "scenes",
@@ -454,6 +518,14 @@ class LlamaCppVisionProvider(IVisionProvider):
                 raise VisionProviderError(
                     f"vision structured field '{field_name}' must be an array"
                 )
+            if (
+                max_observations_per_kind is not None
+                and len(values) > max_observations_per_kind
+            ):
+                raise VisionProviderError(
+                    f"vision structured field '{field_name}' "
+                    "exceeds configured item limit"
+                )
             for item in values:
                 if (
                     not isinstance(item, Mapping)
@@ -462,10 +534,20 @@ class LlamaCppVisionProvider(IVisionProvider):
                     raise VisionProviderError(
                         "vision observation has invalid fields"
                     )
+                label = item["label"]
+                if (
+                    max_label_chars is not None
+                    and isinstance(label, str)
+                    and len(label) > max_label_chars
+                ):
+                    raise VisionProviderError(
+                        "vision observation label exceeds configured "
+                        "length limit"
+                    )
                 observations.append(
                     VisionObservation(
                         kind=kind,
-                        label=item["label"],
+                        label=label,
                         confidence=item["confidence"],
                     )
                 )
@@ -478,8 +560,17 @@ class LlamaCppVisionProvider(IVisionProvider):
             isinstance(caption_payload, Mapping)
             and set(caption_payload) == {"text", "confidence"}
         ):
+            caption_text = caption_payload["text"]
+            if (
+                max_caption_chars is not None
+                and isinstance(caption_text, str)
+                and len(caption_text) > max_caption_chars
+            ):
+                raise VisionProviderError(
+                    "vision caption exceeds configured length limit"
+                )
             caption = VisionCaption(
-                text=caption_payload["text"],
+                text=caption_text,
                 confidence=caption_payload["confidence"],
             )
         else:
