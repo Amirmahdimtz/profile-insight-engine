@@ -77,6 +77,28 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(args.skip_model_acquisition)
 
+    def test_cli_accepts_existing_runtime_for_fast_diagnostic(self):
+        args = _build_parser().parse_args(
+            [
+                "--manifest",
+                "manifest.json",
+                "--dataset-root",
+                ".",
+                "--candidate",
+                "qwen=repo:model",
+                "--iterations",
+                "1",
+                "--existing-runtime-base-url",
+                "http://127.0.0.1:51749",
+                "--output",
+                "report.json",
+            ]
+        )
+        self.assertEqual(
+            args.existing_runtime_base_url,
+            "http://127.0.0.1:51749",
+        )
+
     def test_benchmark_label_normalization_is_case_and_whitespace_stable(
         self,
     ):
