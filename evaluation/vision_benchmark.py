@@ -31,6 +31,10 @@ from src.core.profile_analysis.contracts import (
     ProfileAnalysisRequest,
 )
 from src.core.profile_analysis.image_contracts import RawImageInput
+from src.core.profile_analysis.vision_contracts import (
+    VisionProviderError,
+    VisionValidationError,
+)
 from src.core.services.profile_analysis.evidence_extraction_service import (
     EvidenceExtractionService,
     normalize_visual_text,
@@ -54,6 +58,37 @@ _VISUAL_LABEL_TYPES = (
     EvaluationLabelType.ACTIVITY,
     EvaluationLabelType.TOPIC,
 )
+
+
+def _sanitized_failure_reason(exc: Exception) -> str:
+    if isinstance(
+        exc,
+        (VisionProviderError, VisionValidationError),
+    ):
+        return f"{type(exc).__name__}: {exc}"
+    return type(exc).__name__
+
+
+def _deterministic_rerun_status(
+    iterations: int,
+    deterministic: bool,
+) -> bool | None:
+    if iterations < 2:
+        return None
+    return deterministic
+
+
+def _report_exit_code(report: Mapping[str, Any]) -> int:
+    candidates = report.get("candidates")
+    if not isinstance(candidates, Sequence):
+        return 2
+    for candidate in candidates:
+        if (
+            isinstance(candidate, Mapping)
+            and candidate.get("benchmark_valid") is False
+        ):
+            return 2
+    return 0
 
 
 @dataclass(frozen=True)
@@ -818,6 +853,7 @@ async def run_vision_benchmark_async(
             ] = []
             deterministic = True
             failed_samples = 0
+            failure_reasons: dict[str, int] = {}
 
             for sample in eval_samples:
                 source_path = (
@@ -931,8 +967,12 @@ async def run_vision_benchmark_async(
                             in signatures[1:]
                         ):
                             deterministic = False
-                    except Exception:
+                    except Exception as exc:
                         failed_samples += 1
+                        reason = _sanitized_failure_reason(exc)
+                        failure_reasons[reason] = (
+                            failure_reasons.get(reason, 0) + 1
+                        )
                         continue
 
                     if first_result is not None:
@@ -1085,6 +1125,12 @@ async def run_vision_benchmark_async(
                     "failed_sample_count": (
                         failed_samples
                     ),
+                    "benchmark_valid": (
+                        failed_samples < len(eval_samples)
+                    ),
+                    "failure_reasons": dict(
+                        sorted(failure_reasons.items())
+                    ),
                     "evaluated_label_types": (
                         evaluated_label_types
                     ),
@@ -1141,7 +1187,10 @@ async def run_vision_benchmark_async(
                         resource_monitor.peak_vram_mb
                     ),
                     "deterministic_rerun": (
-                        deterministic
+                        _deterministic_rerun_status(
+                            iterations,
+                            deterministic,
+                        )
                     ),
                     "per_label_type": (
                         per_label_type
@@ -1207,6 +1256,14 @@ async def run_vision_benchmark_async(
                 "SHA-256 of the local GGUF model_path "
                 "exposed by llama.cpp /props when that "
                 "path is readable"
+            ),
+            "failure_reasons": (
+                "sanitized exception categories/messages only; "
+                "raw model output and image content are not retained"
+            ),
+            "deterministic_rerun": (
+                "null when iterations < 2 because no rerun was "
+                "performed"
             ),
         },
     }
@@ -1305,7 +1362,7 @@ def main(
         + "\n",
         encoding="utf-8",
     )
-    return 0
+    return _report_exit_code(report)
 
 
 if __name__ == "__main__":
