@@ -629,6 +629,7 @@ async def run_vision_benchmark_async(
     request_timeout_seconds: int | None = None,
     max_tokens: int | None = None,
     skip_model_acquisition: bool = False,
+    existing_runtime_base_url: str | None = None,
 ) -> dict[str, Any]:
     if iterations <= 0:
         raise ValueError(
@@ -669,6 +670,35 @@ async def run_vision_benchmark_async(
         )
     if not isinstance(skip_model_acquisition, bool):
         raise ValueError("skip_model_acquisition must be a boolean")
+    if existing_runtime_base_url is not None:
+        if (
+            not isinstance(existing_runtime_base_url, str)
+            or not existing_runtime_base_url.strip()
+        ):
+            raise ValueError(
+                "existing_runtime_base_url must be a non-empty "
+                "string when provided"
+            )
+        existing_runtime_base_url = (
+            existing_runtime_base_url.strip().rstrip("/")
+        )
+        if not (
+            existing_runtime_base_url.startswith(
+                "http://127.0.0.1:"
+            )
+            or existing_runtime_base_url.startswith(
+                "http://localhost:"
+            )
+        ):
+            raise ValueError(
+                "existing_runtime_base_url must reference a "
+                "local HTTP llama.cpp runtime"
+            )
+        if len(candidates) != 1:
+            raise ValueError(
+                "existing_runtime_base_url requires exactly "
+                "one candidate"
+            )
     if model_acquisition_timeout_seconds is not None and (
         isinstance(
             model_acquisition_timeout_seconds,
@@ -762,7 +792,10 @@ async def run_vision_benchmark_async(
 
     for candidate in candidates:
         model_acquisition_time_ms: float | None = None
-        if not skip_model_acquisition:
+        using_existing_runtime = (
+            existing_runtime_base_url is not None
+        )
+        if not skip_model_acquisition and not using_existing_runtime:
             acquisition_port = _free_port()
             acquisition_base_url = (
                 f"http://127.0.0.1:{acquisition_port}"
@@ -793,21 +826,26 @@ async def run_vision_benchmark_async(
             finally:
                 _stop_runtime(acquisition_process)
 
-        port = _free_port()
-        base_url = f"http://127.0.0.1:{port}"
-        process = _start_runtime(
-            _runtime_command(
-                runtime_executable,
-                candidate,
-                port,
-                offline=True,
+        process: subprocess.Popen[bytes] | None = None
+        resource_monitor: _RuntimeResourceMonitor | None = None
+        model_load_time_ms: float | None = None
+        if using_existing_runtime:
+            base_url = existing_runtime_base_url
+        else:
+            port = _free_port()
+            base_url = f"http://127.0.0.1:{port}"
+            process = _start_runtime(
+                _runtime_command(
+                    runtime_executable,
+                    candidate,
+                    port,
+                    offline=True,
+                )
             )
-        )
-        resource_monitor = _RuntimeResourceMonitor(
-            process.pid
-        )
-        resource_monitor.start()
-        try:
+            resource_monitor = _RuntimeResourceMonitor(
+                process.pid
+            )
+            resource_monitor.start()
             try:
                 model_load_time_ms = await asyncio.to_thread(
                     _wait_for_health,
@@ -820,10 +858,12 @@ async def run_vision_benchmark_async(
                     f"vision candidate '{candidate.name}' "
                     "offline model load failed"
                 ) from exc
+        try:
             props = await asyncio.to_thread(
                 _runtime_props,
                 base_url,
-                base_settings.request_timeout_seconds,
+                request_timeout_seconds
+                or base_settings.request_timeout_seconds,
             )
             settings = LlamaCppVisionSettings(
                 base_url=base_url,
@@ -1207,15 +1247,23 @@ async def run_vision_benchmark_async(
                     ),
                     "model_acquisition_skipped": (
                         skip_model_acquisition
+                        or using_existing_runtime
+                    ),
+                    "existing_runtime_reused": (
+                        using_existing_runtime
                     ),
                     "model_load_time_ms": (
                         model_load_time_ms
                     ),
                     "runtime_peak_ram_mb": (
-                        resource_monitor.peak_ram_mb
+                        None
+                        if resource_monitor is None
+                        else resource_monitor.peak_ram_mb
                     ),
                     "vram_peak_mb": (
-                        resource_monitor.peak_vram_mb
+                        None
+                        if resource_monitor is None
+                        else resource_monitor.peak_vram_mb
                     ),
                     "deterministic_rerun": (
                         _deterministic_rerun_status(
@@ -1229,8 +1277,10 @@ async def run_vision_benchmark_async(
                 }
             )
         finally:
-            resource_monitor.stop()
-            _stop_runtime(process)
+            if resource_monitor is not None:
+                resource_monitor.stop()
+            if process is not None:
+                _stop_runtime(process)
 
     return {
         "schema_version": "1.0.0",
@@ -1355,6 +1405,9 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
     )
     parser.add_argument(
+        "--existing-runtime-base-url",
+    )
+    parser.add_argument(
         "--output",
         required=True,
     )
@@ -1397,6 +1450,9 @@ def main(
             max_tokens=args.max_tokens,
             skip_model_acquisition=(
                 args.skip_model_acquisition
+            ),
+            existing_runtime_base_url=(
+                args.existing_runtime_base_url
             ),
         )
     )
