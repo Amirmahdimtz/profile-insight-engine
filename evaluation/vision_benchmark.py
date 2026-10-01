@@ -626,6 +626,8 @@ async def run_vision_benchmark_async(
     runtime_executable: str | None,
     startup_timeout_seconds: int | None,
     model_acquisition_timeout_seconds: int | None = None,
+    request_timeout_seconds: int | None = None,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     if iterations <= 0:
         raise ValueError(
@@ -679,6 +681,19 @@ async def run_vision_benchmark_async(
             "model_acquisition_timeout_seconds must be a "
             "positive integer when provided"
         )
+    for field_name, value in (
+        ("request_timeout_seconds", request_timeout_seconds),
+        ("max_tokens", max_tokens),
+    ):
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value <= 0
+        ):
+            raise ValueError(
+                f"{field_name} must be a positive integer "
+                "when provided"
+            )
 
     manifest_fingerprint = manifest.fingerprint()
     if (
@@ -808,14 +823,18 @@ async def run_vision_benchmark_async(
             settings = LlamaCppVisionSettings(
                 base_url=base_url,
                 request_timeout_seconds=(
-                    base_settings.request_timeout_seconds
+                    request_timeout_seconds
+                    or base_settings.request_timeout_seconds
                 ),
                 model_id=candidate.hf_model,
                 model_version=candidate.name,
                 config_version=(
                     base_settings.config_version
                 ),
-                max_tokens=base_settings.max_tokens,
+                max_tokens=(
+                    max_tokens
+                    or base_settings.max_tokens
+                ),
                 temperature=base_settings.temperature,
                 top_p=base_settings.top_p,
                 seed=base_settings.seed,
@@ -1119,6 +1138,10 @@ async def run_vision_benchmark_async(
                         props.get("model_path")
                     ),
                     "model_sha256": model_sha256,
+                    "request_timeout_seconds": (
+                        settings.request_timeout_seconds
+                    ),
+                    "max_tokens": settings.max_tokens,
                     "sample_count": len(
                         eval_samples
                     ),
@@ -1312,6 +1335,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
     )
     parser.add_argument(
+        "--request-timeout-seconds",
+        type=int,
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+    )
+    parser.add_argument(
         "--output",
         required=True,
     )
@@ -1348,6 +1379,10 @@ def main(
             model_acquisition_timeout_seconds=(
                 args.model_acquisition_timeout_seconds
             ),
+            request_timeout_seconds=(
+                args.request_timeout_seconds
+            ),
+            max_tokens=args.max_tokens,
         )
     )
     output_path = Path(args.output)
