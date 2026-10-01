@@ -59,6 +59,24 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args.request_timeout_seconds, 300)
         self.assertEqual(args.max_tokens, 256)
 
+    def test_cli_accepts_cached_diagnostic_skip_acquisition(self):
+        args = _build_parser().parse_args(
+            [
+                "--manifest",
+                "manifest.json",
+                "--dataset-root",
+                ".",
+                "--candidate",
+                "qwen=repo:model",
+                "--iterations",
+                "1",
+                "--skip-model-acquisition",
+                "--output",
+                "report.json",
+            ]
+        )
+        self.assertTrue(args.skip_model_acquisition)
+
     def test_benchmark_label_normalization_is_case_and_whitespace_stable(
         self,
     ):
