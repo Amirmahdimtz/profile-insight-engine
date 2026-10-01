@@ -27,6 +27,11 @@ PROVIDER_FILE = (
     / "vision"
     / "llama_cpp_vision_provider.py"
 )
+DOC_FILE = (
+    REPOSITORY_ROOT
+    / "docs"
+    / "phase_5_visual_understanding.md"
+)
 PRODUCTION_FILES = (
     REPOSITORY_ROOT
     / "src"
@@ -179,6 +184,29 @@ class Phase5ArchitectureTests(unittest.TestCase):
         for term in forbidden_terms:
             with self.subTest(term=term):
                 self.assertNotIn(term, production_text)
+
+    def test_windows_verification_contract_requires_synced_main_and_fresh_shell(
+        self,
+    ):
+        documentation = DOC_FILE.read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "git pull --ff-only origin main",
+            documentation,
+        )
+        self.assertIn(
+            "Close this PowerShell window",
+            documentation,
+        )
+        self.assertIn(
+            "Winget updates PATH for future shells",
+            documentation,
+        )
+        self.assertIn(
+            "Get-Command llama-server -ErrorAction Stop",
+            documentation,
+        )
 
     def test_no_manual_provider_registration_or_content_logging(
         self,

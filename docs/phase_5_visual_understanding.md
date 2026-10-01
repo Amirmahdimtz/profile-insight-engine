@@ -96,7 +96,20 @@ Candidate processes are run sequentially with the same dataset, decode settings,
 
 ## Windows local verification prerequisites
 
-Run commands from the repository root in PowerShell.
+Run commands from the repository root in a fresh PowerShell session.
+
+First synchronize the local `main` branch before interpreting any verification result. Existing untracked benchmark reports do not need to be deleted, but tracked local modifications must be reviewed before pulling.
+
+```powershell
+git status --short
+git fetch origin
+git switch main
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) { throw "Unable to fast-forward local main. Review local tracked changes before continuing." }
+git rev-parse HEAD
+```
+
+The HEAD printed above must match the latest Phase 5 verification commit documented in the current instructions.
 
 Set the authorized dataset, model cache and report paths. The model cache is intentionally outside the Git repository. `LLAMA_CACHE` is an official llama.cpp cache control.
 
@@ -122,13 +135,17 @@ Install/verify llama.cpp. The benchmark uses the `llama-server` executable direc
 $LlamaServer = Get-Command llama-server -ErrorAction SilentlyContinue
 if (-not $LlamaServer) {
     winget install llama.cpp
-    $LlamaServer = Get-Command llama-server -ErrorAction SilentlyContinue
+    if ($LASTEXITCODE -ne 0) { throw "llama.cpp installation failed" }
+
+    Write-Host "llama.cpp was installed. Close this PowerShell window, open a new PowerShell session, return to the repository root, restore the environment variables above, and continue with the verification commands."
+    return
 }
-if (-not $LlamaServer) {
-    throw "llama-server is not available on PATH. Reopen PowerShell after installing llama.cpp and run this check again."
-}
+
 llama-server --version
+if ($LASTEXITCODE -ne 0) { throw "llama-server version check failed" }
 ```
+
+Do not treat `Get-Command llama-server` failing immediately after a successful `winget install` in the same PowerShell session as an installation failure. Winget updates PATH for future shells; reopen PowerShell before continuing.
 
 Detect NVIDIA GPU availability without assuming CUDA/GPU support. The llama.cpp provider can run on CPU; GPU usage is not a Phase 5 prerequisite.
 
@@ -144,6 +161,17 @@ if ($NvidiaSmi) {
 The `-hf` model specs used by the benchmark download/cache weights through llama.cpp under `$env:LLAMA_CACHE`; no model weights are committed to the repository.
 
 ## Local verification commands
+
+Before compile/tests, confirm the synchronized commit and runtime:
+
+```powershell
+git status --short
+git rev-parse HEAD
+Get-Command llama-server -ErrorAction Stop
+llama-server --version
+```
+
+An untracked `phase4_ocr_benchmark.json` is allowed and does not invalidate Phase 5 verification. Do not delete it solely to make `git status` empty.
 
 Compile/import-safe syntax check:
 
