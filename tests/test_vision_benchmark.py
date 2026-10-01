@@ -52,12 +52,21 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
                 "300",
                 "--max-tokens",
                 "256",
+                "--max-observations-per-kind",
+                "1",
+                "--max-label-chars",
+                "32",
+                "--max-caption-chars",
+                "80",
                 "--output",
                 "report.json",
             ]
         )
         self.assertEqual(args.request_timeout_seconds, 300)
         self.assertEqual(args.max_tokens, 256)
+        self.assertEqual(args.max_observations_per_kind, 1)
+        self.assertEqual(args.max_label_chars, 32)
+        self.assertEqual(args.max_caption_chars, 80)
 
     def test_cli_accepts_cached_diagnostic_skip_acquisition(self):
         args = _build_parser().parse_args(
