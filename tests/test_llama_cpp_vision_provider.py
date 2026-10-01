@@ -22,6 +22,9 @@ def _settings() -> LlamaCppVisionSettings:
         model_version="v1",
         config_version="phase5-v1",
         max_tokens=512,
+        max_observations_per_kind=3,
+        max_label_chars=64,
+        max_caption_chars=160,
         temperature=0.0,
         top_p=1.0,
         seed=0,
@@ -107,6 +110,27 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
                 }
             )
 
+    def test_configured_output_limits_are_enforced(self):
+        with self.assertRaisesRegex(
+            VisionProviderError,
+            "exceeds configured item limit",
+        ):
+            LlamaCppVisionProvider._parse_structured_output(
+                {
+                    "scenes": [],
+                    "objects": [
+                        {"label": "one", "confidence": 0.9},
+                        {"label": "two", "confidence": 0.8},
+                    ],
+                    "activities": [],
+                    "topics": [],
+                    "caption": None,
+                },
+                max_observations_per_kind=1,
+                max_label_chars=64,
+                max_caption_chars=160,
+            )
+
     def test_request_uses_llama_cpp_native_json_schema_shape(self):
         provider = LlamaCppVisionProvider(
             object(),
@@ -134,12 +158,21 @@ class LlamaCppVisionProviderParsingTests(unittest.TestCase):
             "json_schema",
         )
         self.assertNotIn("json_schema", response_format)
+        schema = response_format["schema"]
         self.assertEqual(
-            response_format["schema"],
-            __import__(
-                "src.infrastructure.providers.vision.llama_cpp_vision_provider",
-                fromlist=["_OUTPUT_SCHEMA"],
-            )._OUTPUT_SCHEMA,
+            schema["properties"]["objects"]["maxItems"],
+            3,
+        )
+        self.assertEqual(
+            schema["properties"]["objects"]["items"]["properties"]["label"][
+                "maxLength"
+            ],
+            64,
+        )
+        caption_schema = schema["properties"]["caption"]["anyOf"][0]
+        self.assertEqual(
+            caption_schema["properties"]["text"]["maxLength"],
+            160,
         )
 
     def test_completion_payload_requires_single_json_choice(self):
