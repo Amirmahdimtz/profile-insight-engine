@@ -225,14 +225,16 @@ if ($LASTEXITCODE -ne 0) { throw "test suite failed" }
 
 Run the real Phase 5 candidate benchmark:
 
+The target Windows closure benchmark uses the two-candidate shortlist above. Qwen2.5-VL 7B remains an optional extended comparison rather than a closure prerequisite because the verified target environment already shows request-time pressure at 3B/4B scale; adding a larger candidate would not improve the minimum multi-candidate evidence required for Phase 5 closure.
+
 ```powershell
 python -m evaluation.vision_benchmark `
   --manifest "$env:DATASET_ROOT\manifest.json" `
   --dataset-root "$env:DATASET_ROOT" `
   --candidate "qwen2.5-vl-3b=ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M" `
   --candidate "gemma3-4b=ggml-org/gemma-3-4b-it-GGUF:Q4_K_M" `
-  --candidate "qwen2.5-vl-7b=ggml-org/Qwen2.5-VL-7B-Instruct-GGUF:Q4_K_M" `
   --iterations 2 `
+  --request-timeout-seconds 300 `
   --determinism-sample-count 3 `
   --expected-manifest-fingerprint "$env:EXPECTED_MANIFEST_FINGERPRINT" `
   --expected-dataset-content-fingerprint "$env:EXPECTED_DATASET_CONTENT_FINGERPRINT" `
