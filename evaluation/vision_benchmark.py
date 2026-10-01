@@ -880,6 +880,11 @@ async def run_vision_benchmark_async(
                     max_tokens
                     or base_settings.max_tokens
                 ),
+                max_observations_per_kind=(
+                    base_settings.max_observations_per_kind
+                ),
+                max_label_chars=base_settings.max_label_chars,
+                max_caption_chars=base_settings.max_caption_chars,
                 temperature=base_settings.temperature,
                 top_p=base_settings.top_p,
                 seed=base_settings.seed,
@@ -1187,6 +1192,11 @@ async def run_vision_benchmark_async(
                         settings.request_timeout_seconds
                     ),
                     "max_tokens": settings.max_tokens,
+                    "max_observations_per_kind": (
+                        settings.max_observations_per_kind
+                    ),
+                    "max_label_chars": settings.max_label_chars,
+                    "max_caption_chars": settings.max_caption_chars,
                     "sample_count": len(
                         eval_samples
                     ),
