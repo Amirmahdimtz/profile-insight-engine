@@ -213,6 +213,8 @@ def _start_runtime(
 def _stop_runtime(
     process: subprocess.Popen[bytes],
 ) -> None:
+    if process.poll() is not None:
+        return
     process.terminate()
     try:
         process.wait(timeout=10)
@@ -719,14 +721,20 @@ async def run_vision_benchmark_async(
             )
         )
         try:
-            model_acquisition_time_ms = (
-                await asyncio.to_thread(
-                    _wait_for_health,
-                    acquisition_base_url,
-                    model_acquisition_timeout_seconds,
-                    acquisition_process,
+            try:
+                model_acquisition_time_ms = (
+                    await asyncio.to_thread(
+                        _wait_for_health,
+                        acquisition_base_url,
+                        model_acquisition_timeout_seconds,
+                        acquisition_process,
+                    )
                 )
-            )
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"vision candidate '{candidate.name}' "
+                    "model acquisition failed"
+                ) from exc
         finally:
             _stop_runtime(acquisition_process)
 
@@ -745,12 +753,18 @@ async def run_vision_benchmark_async(
         )
         resource_monitor.start()
         try:
-            model_load_time_ms = await asyncio.to_thread(
-                _wait_for_health,
-                base_url,
-                startup_timeout_seconds,
-                process,
-            )
+            try:
+                model_load_time_ms = await asyncio.to_thread(
+                    _wait_for_health,
+                    base_url,
+                    startup_timeout_seconds,
+                    process,
+                )
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"vision candidate '{candidate.name}' "
+                    "offline model load failed"
+                ) from exc
             props = await asyncio.to_thread(
                 _runtime_props,
                 base_url,
