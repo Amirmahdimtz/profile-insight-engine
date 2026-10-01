@@ -1,5 +1,6 @@
 import argparse
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from evaluation.vision_benchmark import (
     _parse_candidate,
     _provider_claims,
     _runtime_command,
+    _wait_for_health,
     audit_visual_label_coverage,
     run_vision_benchmark_async,
 )
@@ -64,6 +66,37 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
                 candidate.hf_model,
             ],
         )
+
+    def test_health_poll_retries_transient_connection_reset(
+        self,
+    ):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.read.return_value = b'{"status":"ok"}'
+        process = mock.MagicMock()
+        process.poll.return_value = None
+
+        with (
+            mock.patch(
+                "evaluation.vision_benchmark.urllib.request.urlopen",
+                side_effect=(
+                    ConnectionResetError(10054, "connection reset"),
+                    response,
+                ),
+            ),
+            mock.patch(
+                "evaluation.vision_benchmark.time.sleep",
+            ),
+        ):
+            elapsed_ms = _wait_for_health(
+                "http://127.0.0.1:1234",
+                1,
+                process,
+            )
+
+        self.assertGreaterEqual(elapsed_ms, 0.0)
+        self.assertEqual(process.poll.call_count, 2)
 
     async def test_fingerprint_mismatch_fails_before_runtime_start(
         self,
