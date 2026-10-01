@@ -216,6 +216,37 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
             0,
         )
 
+        self.assertEqual(
+            _report_exit_code(
+                {
+                    "candidates": [
+                        {
+                            "benchmark_valid": False,
+                            "candidate_status": "rejected_preflight",
+                        },
+                        {
+                            "benchmark_valid": True,
+                            "candidate_status": "evaluated",
+                        },
+                    ]
+                }
+            ),
+            0,
+        )
+        self.assertEqual(
+            _report_exit_code(
+                {
+                    "candidates": [
+                        {
+                            "benchmark_valid": False,
+                            "candidate_status": "rejected_preflight",
+                        },
+                    ]
+                }
+            ),
+            2,
+        )
+
     def test_single_iteration_does_not_claim_deterministic_rerun(
         self,
     ):
