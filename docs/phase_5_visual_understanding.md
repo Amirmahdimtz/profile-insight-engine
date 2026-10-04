@@ -11,7 +11,7 @@ It produces observable `scene`, `object`, `activity`, `topic`, and a short factu
 
 DI follows the existing discovery mechanism: `@inject` on the concrete provider and Core service, constructor injection, and no feature-specific manual registration.
 
-The concrete provider uses llama.cpp's local OpenAI-compatible server. Model/runtime-specific HTTP payloads, base64 image transport, schema-constrained JSON, and response parsing remain in Infrastructure and do not cross into Core. The provider validates the exact structured response shape before returning a `VisionProviderResult`.
+The concrete provider uses llama.cpp's local OpenAI-compatible server. Model/runtime-specific HTTP payloads, base64 image transport, schema-constrained JSON, and response parsing remain in Infrastructure and do not cross into Core. The provider validates the exact structured response shape before returning a `VisionProviderResult`. Benchmark-managed llama.cpp processes use the same explicit runtime shape as the verified diagnostic path: `vision.runtime_context_size=4096` and `vision.runtime_parallel=1`. Both acquisition and measured offline startup receive those values so benchmark load behavior does not depend on llama.cpp model-derived context or automatic slot selection.
 
 Every emitted standard `Evidence` remains directly traceable to `image_id`, provider, provider build/version, model identifier/version, config version, and confidence semantics. Evidence IDs are deterministic hashes of image/type/normalized value.
 
@@ -87,6 +87,7 @@ For each candidate it records, where measurable:
 - unsupported-claim rate on strictly parsed pre-policy provider claims, post-validation Evidence, and failed/rejected sample count;
 - p50/p95 per-image latency;
 - model acquisition/warm-up time;
+- explicit runtime context size and parallel slot count;
 - model load time measured from a second offline startup after acquisition;
 - sampled llama.cpp process RAM peak;
 - sampled NVIDIA process VRAM peak when `nvidia-smi` is available, otherwise `null`;
@@ -294,7 +295,7 @@ $Report |
 $Report.visual_label_coverage | ConvertTo-Json -Depth 8
 
 $Report.candidates |
-    Select-Object candidate,candidate_status,rejection_stage,benchmark_valid,sample_count,evaluated_sample_count,failed_sample_count,failure_reasons,preflight_sample_id,preflight_latency_ms,precision,recall,f1,unsupported_claim_rate_pre_policy,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_acquisition_time_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,determinism_sample_count,deterministic_rerun |
+    Select-Object candidate,candidate_status,rejection_stage,benchmark_valid,runtime_context_size,runtime_parallel,sample_count,evaluated_sample_count,failed_sample_count,failure_reasons,preflight_sample_id,preflight_latency_ms,precision,recall,f1,unsupported_claim_rate_pre_policy,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_acquisition_time_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,determinism_sample_count,deterministic_rerun |
     Format-List
 
 $Report.candidates | ForEach-Object {
