@@ -208,7 +208,7 @@ class Phase5ArchitectureTests(unittest.TestCase):
             documentation,
         )
         self.assertIn(
-            '--runtime-executable "$env:LLAMA_SERVER_EXE"',
+            '--runtime-executable "$LlamaServerExe"',
             documentation,
         )
         self.assertNotIn(
@@ -239,6 +239,17 @@ class Phase5ArchitectureTests(unittest.TestCase):
         )
         self.assertIn(
             "candidate_status=rejected_preflight",
+            documentation,
+        )
+
+        self.assertIn(
+            '$ExpectedManifestFingerprint = '
+            '"06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc"',
+            documentation,
+        )
+        self.assertIn(
+            '$ExpectedDatasetContentFingerprint = '
+            '"5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e"',
             documentation,
         )
 
