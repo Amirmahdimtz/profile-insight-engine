@@ -12,6 +12,7 @@ from evaluation.vision_benchmark import (
     _parse_candidate,
     _deterministic_rerun_status,
     _provider_claims,
+    _rejected_candidate_report,
     _report_exit_code,
     _runtime_command,
     _sample_iteration_count,
@@ -177,6 +178,52 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreaterEqual(elapsed_ms, 0.0)
         self.assertEqual(process.poll.call_count, 2)
+
+    def test_runtime_failure_rejection_report_preserves_evidence(self):
+        candidate = _parse_candidate(
+            "gemma=ggml-org/gemma-3-4b-it-GGUF:Q4_K_M"
+        )
+        report = _rejected_candidate_report(
+            candidate=candidate,
+            stage="model_acquisition",
+            reason="RuntimeError: model acquisition failed",
+            sample_count=18,
+            request_timeout_seconds=300,
+            max_tokens=768,
+            max_observations_per_kind=3,
+            max_label_chars=64,
+            max_caption_chars=160,
+            model_acquisition_time_ms=1234.5,
+        )
+        self.assertEqual(
+            report["candidate_status"],
+            "rejected_preflight",
+        )
+        self.assertEqual(
+            report["rejection_stage"],
+            "model_acquisition",
+        )
+        self.assertFalse(report["benchmark_valid"])
+        self.assertEqual(report["evaluated_sample_count"], 0)
+        self.assertIsNone(report["precision"])
+        self.assertEqual(
+            report["failure_reasons"],
+            {"RuntimeError: model acquisition failed": 1},
+        )
+        self.assertEqual(
+            _report_exit_code(
+                {
+                    "candidates": [
+                        report,
+                        {
+                            "candidate_status": "evaluated",
+                            "benchmark_valid": True,
+                        },
+                    ]
+                }
+            ),
+            0,
+        )
 
     def test_failure_reason_is_sanitized_and_fatal_report_is_nonzero(
         self,
