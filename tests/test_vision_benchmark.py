@@ -194,6 +194,25 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(elapsed_ms, 0.0)
         self.assertEqual(process.poll.call_count, 2)
 
+    def test_inference_preflight_rejection_fields_are_traceable(self):
+        source = (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "evaluation"
+            / "vision_benchmark.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            '"rejection_stage": "inference_preflight"',
+            source,
+        )
+        self.assertIn(
+            '"runtime_context_size": (',
+            source,
+        )
+        self.assertIn(
+            '"runtime_parallel": runtime_parallel',
+            source,
+        )
+
     def test_runtime_failure_rejection_report_preserves_evidence(self):
         candidate = _parse_candidate(
             "gemma=ggml-org/gemma-3-4b-it-GGUF:Q4_K_M"
