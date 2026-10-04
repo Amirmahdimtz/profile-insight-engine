@@ -368,10 +368,10 @@ Qwen quality/determinism evidence was collected with explicit benchmark-only gen
 
 Per-label-type quality on the current dataset was also `F1=0.0` for activity, object, scene and topic. This poor model/runtime result is retained as benchmark evidence rather than hidden through post-hoc threshold or label tuning. It demonstrates that the Phase 5 extraction/evaluation path is operational and reproducible, but it does **not** justify freezing Qwen2.5-VL-3B or the current decode limits as a final production choice. Broader model/provider and tuning selection remains a Phase 10 benchmark responsibility.
 
-The full repository regression passed 191 tests on the target Windows environment before the final traceability-test typo fix. The latest `main` still requires one final full regression run after that minimal test-only correction before Phase 5 can be marked complete.
+The final target-Windows verification passed compile/import checks and the full repository regression on `main`: 192 tests passed with no failures or errors after the final traceability-test correction. The local working tree contained only untracked benchmark report JSON artifacts; no tracked production/test/documentation changes were pending.
 
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 5 must not be marked `COMPLETE / READY_FOR_NEXT_PHASE` until the target Windows environment provides the real visual-label coverage, multi-candidate benchmark, performance/resource evidence, deterministic rerun evidence, and full regression result.
+Phase 5 is locally verified on the target Windows environment. The structured visual-evidence contract, provider abstraction, llama.cpp Infrastructure provider, Core normalization, policy enforcement, schema validation, deterministic rerun path, real dataset coverage, candidate/runtime comparison, latency/resource measurements, and benchmark traceability are evidenced. The current benchmark also demonstrates that Qwen2.5-VL-3B with the tested target-machine settings has poor quality/performance characteristics (including 13/18 request timeouts and F1=0.0), so no model or tuning choice is frozen as production-final; broader model/provider selection and hardening remain Phase 10 responsibilities.
