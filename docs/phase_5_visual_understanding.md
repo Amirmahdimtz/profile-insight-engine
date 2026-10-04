@@ -203,7 +203,7 @@ $DatasetRoot = "E:\phase2-real-dataset"
 $ModelRoot = "E:\profile-insight-models"
 $ManifestPath = Join-Path $DatasetRoot "manifest.json"
 $Phase5Report = Join-Path (Get-Location) "phase5_vision_benchmark.json"
-$ExpectedManifestFingerprint = "06fcf3e196d3f4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc"
+$ExpectedManifestFingerprint = "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc"
 $ExpectedDatasetContentFingerprint = "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e"
 
 if (-not (Test-Path $DatasetRoot -PathType Container)) {
