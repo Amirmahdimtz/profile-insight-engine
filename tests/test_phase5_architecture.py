@@ -216,6 +216,32 @@ class Phase5ArchitectureTests(unittest.TestCase):
             documentation,
         )
 
+    def test_phase5_closure_commands_are_self_contained(self):
+        documentation = DOC_FILE.read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '$DatasetRoot = "E:\\phase2-real-dataset"',
+            documentation,
+        )
+        self.assertIn(
+            '$Phase5Report = Join-Path (Get-Location) '
+            '"phase5_vision_benchmark.json"',
+            documentation,
+        )
+        self.assertIn(
+            '--runtime-executable "$LlamaServerExe"',
+            documentation,
+        )
+        self.assertIn(
+            '--output "$Phase5Report"',
+            documentation,
+        )
+        self.assertIn(
+            "candidate_status=rejected_preflight",
+            documentation,
+        )
+
     def test_no_manual_provider_registration_or_content_logging(
         self,
     ):
