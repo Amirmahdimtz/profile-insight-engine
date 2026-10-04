@@ -329,6 +329,47 @@ The shortlist intentionally places Gemma first so an incompatible/too-slow candi
 - No candidate is promoted automatically.
 - If required visual label types are missing/insufficient or candidate runs are not reproducible, Phase 5 remains open and the missing authorized human annotations/runtime evidence must be supplied.
 
+## Verified local evidence
+
+Target Windows evidence collected on the verified Phase 2 dataset:
+
+- dataset_id: `profile_insight_real_eval`
+- dataset_version: `1.0.0`
+- manifest fingerprint: `06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc`
+- dataset-content fingerprint: `5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e`
+- eval samples: 18
+- visual-label coverage: activity 1, object 11, scene 4, topic 5; no required visual label type is missing
+- llama.cpp: `0.5.0-dev`, build `11193`, commit `4e7481175`
+
+Multi-candidate runtime evidence:
+
+| Candidate | Outcome | Stage | Acquisition ms | Load ms | Peak RAM MB |
+| --- | --- | --- | ---: | ---: | ---: |
+| `gemma3-4b` | rejected | offline model load | 1129388.72 | 600162.85 | 4195.85 |
+| `qwen2.5-vl-3b` | runtime acquired and loaded; production-shape inference preflight timed out | inference preflight | 523014.23 | 346666.22 | 3251.37 |
+
+The managed benchmark uses `runtime_context_size=4096` and `runtime_parallel=1`. Gemma is not promoted. Qwen remains the only candidate that completed a real full-dataset quality run on the target machine.
+
+Qwen quality/determinism evidence was collected with explicit benchmark-only generation overrides (`max_tokens=256`, `max_observations_per_kind=1`, `max_label_chars=32`, `max_caption_chars=80`) while reusing the already-loaded local runtime. These overrides are recorded as evaluation settings and do not change the production configuration:
+
+- `candidate_status=evaluated`
+- `benchmark_valid=true`
+- sample count: 18
+- evaluated sample count: 18
+- failed sample count: 13, all sanitized as llama.cpp vision request timeouts
+- overall precision / recall / F1: `0.0 / 0.0 / 0.0`
+- unsupported-claim rate before policy: `0.0`
+- unsupported-claim rate after validation: `0.0`
+- p50 inference latency: `276993.15 ms`
+- p95 inference latency: `298460.05 ms`
+- deterministic rerun sample count: 3
+- deterministic rerun: `true`
+- model SHA-256: `d02fe9b69ad8cadbbd228e387667af66612c44bed29ffc8eb1e7caf9ac486c12`
+
+Per-label-type quality on the current dataset was also `F1=0.0` for activity, object, scene and topic. This poor model/runtime result is retained as benchmark evidence rather than hidden through post-hoc threshold or label tuning. It demonstrates that the Phase 5 extraction/evaluation path is operational and reproducible, but it does **not** justify freezing Qwen2.5-VL-3B or the current decode limits as a final production choice. Broader model/provider and tuning selection remains a Phase 10 benchmark responsibility.
+
+The full repository regression passed 191 tests on the target Windows environment before the final traceability-test typo fix. The latest `main` still requires one final full regression run after that minimal test-only correction before Phase 5 can be marked complete.
+
 ## Status
 
 `IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
