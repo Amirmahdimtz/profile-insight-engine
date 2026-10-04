@@ -196,7 +196,7 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
 
     def test_inference_preflight_rejection_fields_are_traceable(self):
         source = (
-            pathlib.Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[1]
             / "evaluation"
             / "vision_benchmark.py"
         ).read_text(encoding="utf-8")
