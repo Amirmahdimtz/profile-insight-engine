@@ -196,76 +196,127 @@ The `-hf` model specs used by the benchmark download/cache weights and the avail
 
 ## Local verification commands
 
-Before compile/tests, confirm the synchronized commit and resolved runtime:
+Run this closure sequence from the repository root in one fresh PowerShell session. The block is intentionally self-contained so it does not depend on variables created by an earlier shell.
 
 ```powershell
+$DatasetRoot = "E:\phase2-real-dataset"
+$ModelRoot = "E:\profile-insight-models"
+$ManifestPath = Join-Path $DatasetRoot "manifest.json"
+$Phase5Report = Join-Path (Get-Location) "phase5_vision_benchmark.json"
+$ExpectedManifestFingerprint = "06fcf3e196d3f4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc"
+$ExpectedDatasetContentFingerprint = "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e"
+
+if (-not (Test-Path $DatasetRoot -PathType Container)) {
+    throw "Dataset root does not exist: $DatasetRoot"
+}
+if (-not (Test-Path $ManifestPath -PathType Leaf)) {
+    throw "Dataset manifest does not exist: $ManifestPath"
+}
+
+$env:LLAMA_CACHE = Join-Path $ModelRoot "llama-cache"
+New-Item -ItemType Directory -Force -Path $env:LLAMA_CACHE | Out-Null
+
 git status --short
+git fetch origin
+git switch main
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to fast-forward local main. Review tracked local changes."
+}
 git rev-parse HEAD
-if (-not $env:LLAMA_SERVER_EXE) { throw "LLAMA_SERVER_EXE is not set. Run the llama.cpp resolver above first." }
-if (-not (Test-Path $env:LLAMA_SERVER_EXE -PathType Leaf)) { throw "Resolved llama-server executable does not exist: $env:LLAMA_SERVER_EXE" }
-& $env:LLAMA_SERVER_EXE --version
-if ($LASTEXITCODE -ne 0) { throw "llama-server version check failed" }
-```
 
-An untracked `phase4_ocr_benchmark.json` is allowed and does not invalidate Phase 5 verification. Do not delete it solely to make `git status` empty.
+$LlamaServerCommand = Get-Command llama-server -ErrorAction SilentlyContinue
+if ($LlamaServerCommand) {
+    $LlamaServerExe = $LlamaServerCommand.Source
+} else {
+    $WinGetRoots = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"),
+        "C:\Program Files\WinGet\Packages",
+        "C:\Program Files (x86)\WinGet\Packages"
+    ) | Where-Object { Test-Path $_ -PathType Container }
 
-Compile/import-safe syntax check:
+    $LlamaServerExe = $WinGetRoots |
+        ForEach-Object {
+            Get-ChildItem -Path $_ -Filter "llama-server.exe" -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match "ggml\.llamacpp" } |
+                Select-Object -ExpandProperty FullName
+        } |
+        Select-Object -First 1
+}
 
-```powershell
+if (-not $LlamaServerExe -or -not (Test-Path $LlamaServerExe -PathType Leaf)) {
+    throw "llama-server.exe could not be resolved."
+}
+
+& $LlamaServerExe --version
+if ($LASTEXITCODE -ne 0) {
+    throw "llama-server version check failed"
+}
+
 python -m compileall -q src evaluation tests
-if ($LASTEXITCODE -ne 0) { throw "compileall failed" }
-```
+if ($LASTEXITCODE -ne 0) {
+    throw "compileall failed"
+}
 
-Run the full regression suite, including Phases 1–5:
-
-```powershell
 python -m unittest discover -s tests -p "test_*.py" -v
-if ($LASTEXITCODE -ne 0) { throw "test suite failed" }
-```
+if ($LASTEXITCODE -ne 0) {
+    throw "test suite failed"
+}
 
-Run the real Phase 5 candidate benchmark:
+Remove-Item $Phase5Report -Force -ErrorAction SilentlyContinue
 
-The target Windows closure benchmark uses the two-candidate shortlist above. Qwen2.5-VL 7B remains an optional extended comparison rather than a closure prerequisite because the verified target environment already shows request-time pressure at 3B/4B scale; adding a larger candidate would not improve the minimum multi-candidate evidence required for Phase 5 closure.
-
-```powershell
 python -m evaluation.vision_benchmark `
-  --manifest "$env:DATASET_ROOT\manifest.json" `
-  --dataset-root "$env:DATASET_ROOT" `
-  --candidate "qwen2.5-vl-3b=ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M" `
+  --manifest "$ManifestPath" `
+  --dataset-root "$DatasetRoot" `
   --candidate "gemma3-4b=ggml-org/gemma-3-4b-it-GGUF:Q4_K_M" `
+  --candidate "qwen2.5-vl-3b=ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M" `
   --iterations 2 `
-  --request-timeout-seconds 300 `
   --determinism-sample-count 3 `
-  --expected-manifest-fingerprint "$env:EXPECTED_MANIFEST_FINGERPRINT" `
-  --expected-dataset-content-fingerprint "$env:EXPECTED_DATASET_CONTENT_FINGERPRINT" `
-  --runtime-executable "$env:LLAMA_SERVER_EXE" `
-  --output "$env:PHASE5_REPORT"
-if ($LASTEXITCODE -ne 0) { throw "Phase 5 benchmark failed" }
-```
+  --request-timeout-seconds 300 `
+  --expected-manifest-fingerprint "$ExpectedManifestFingerprint" `
+  --expected-dataset-content-fingerprint "$ExpectedDatasetContentFingerprint" `
+  --runtime-executable "$LlamaServerExe" `
+  --output "$Phase5Report"
 
-Inspect dataset coverage and reproducibility/resource metrics:
+$BenchmarkExitCode = $LASTEXITCODE
+Write-Host "Phase 5 benchmark exit code: $BenchmarkExitCode"
 
-```powershell
-$Report = Get-Content "$env:PHASE5_REPORT" -Raw | ConvertFrom-Json
-$Report | Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,iterations
+if (-not (Test-Path $Phase5Report -PathType Leaf)) {
+    throw "Phase 5 benchmark report was not created."
+}
+
+$Report = Get-Content $Phase5Report -Raw | ConvertFrom-Json
+
+$Report |
+    Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,iterations |
+    Format-List
+
 $Report.visual_label_coverage | ConvertTo-Json -Depth 8
-$Report.candidates | Select-Object candidate,hf_model,provider,provider_version,model_sha256,sample_count,failed_sample_count,precision,recall,f1,unsupported_claim_rate_pre_policy,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_acquisition_time_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,deterministic_rerun | Format-Table -AutoSize
-$Report.candidates | ForEach-Object { $_.per_label_type | ConvertTo-Json -Depth 6 }
-```
 
-Verify model fingerprints are present whenever `/props.model_path` points to a readable local GGUF:
+$Report.candidates |
+    Select-Object candidate,candidate_status,benchmark_valid,sample_count,evaluated_sample_count,failed_sample_count,failure_reasons,preflight_sample_id,preflight_latency_ms,precision,recall,f1,unsupported_claim_rate_pre_policy,unsupported_claim_rate_post_validation,p50_latency_ms,p95_latency_ms,model_acquisition_time_ms,model_load_time_ms,runtime_peak_ram_mb,vram_peak_mb,determinism_sample_count,deterministic_rerun |
+    Format-List
 
-```powershell
 $Report.candidates | ForEach-Object {
     if ($_.model_path -and (Test-Path $_.model_path -PathType Leaf)) {
         $LocalHash = (Get-FileHash -Algorithm SHA256 $_.model_path).Hash.ToLowerInvariant()
         if ($_.model_sha256 -and $LocalHash -ne $_.model_sha256) {
             throw "Model SHA-256 mismatch for $($_.candidate)"
         }
-        [pscustomobject]@{ Candidate=$_.candidate; ModelPath=$_.model_path; SHA256=$LocalHash }
+        [pscustomobject]@{
+            Candidate = $_.candidate
+            ModelPath = $_.model_path
+            SHA256 = $LocalHash
+        }
     }
 }
+
+if ($BenchmarkExitCode -ne 0) {
+    throw "Phase 5 benchmark failed; inspect the report above."
+}
 ```
+
+The shortlist intentionally places Gemma first so an incompatible/too-slow candidate is rejected by the single-sample preflight before the longer full Qwen evaluation begins. A preflight rejection is retained as candidate-comparison evidence; it does not receive fabricated quality metrics.
 
 ## Expected result
 
@@ -273,7 +324,7 @@ $Report.candidates | ForEach-Object {
 - DI discovery resolves `IVisionProvider` to `LlamaCppVisionProvider` and resolves `EvidenceExtractionService` without manual registration.
 - The benchmark validates the exact Phase 2 dataset fingerprints before inference.
 - Visual-label coverage is reported rather than assumed.
-- Each candidate report contains actual Precision/Recall/F1, pre-policy and post-validation unsupported-claim rates, rejected/failed sample count, p50/p95 latency, acquisition/warm-up time, offline model-load time, reproducibility status, model/runtime traceability, RAM, and VRAM when measurable.
+- Every `candidate_status=evaluated` report contains actual Precision/Recall/F1, pre-policy and post-validation unsupported-claim rates, failed sample count, p50/p95 latency, acquisition/warm-up time, offline model-load time, reproducibility status, model/runtime traceability, RAM, and VRAM when measurable. A `candidate_status=rejected_preflight` report instead contains the sanitized rejection reason, preflight timing, acquisition/load/resource evidence, and model/runtime traceability; quality metrics remain null rather than being fabricated.
 - No candidate is promoted automatically.
 - If required visual label types are missing/insufficient or candidate runs are not reproducible, Phase 5 remains open and the missing authorized human annotations/runtime evidence must be supplied.
 
