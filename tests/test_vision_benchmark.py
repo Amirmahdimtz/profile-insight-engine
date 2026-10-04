@@ -130,15 +130,30 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
             candidate,
             1234,
             offline=False,
+            context_size=4096,
+            parallel=1,
         )
         measured = _runtime_command(
             "llama-server",
             candidate,
             1234,
             offline=True,
+            context_size=4096,
+            parallel=1,
         )
         self.assertNotIn("--offline", acquisition)
         self.assertIn("--offline", measured)
+        for command in (acquisition, measured):
+            self.assertIn("--ctx-size", command)
+            self.assertEqual(
+                command[command.index("--ctx-size") + 1],
+                "4096",
+            )
+            self.assertIn("--parallel", command)
+            self.assertEqual(
+                command[command.index("--parallel") + 1],
+                "1",
+            )
         self.assertEqual(
             acquisition[:3],
             [
@@ -193,6 +208,8 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
             max_observations_per_kind=3,
             max_label_chars=64,
             max_caption_chars=160,
+            runtime_context_size=4096,
+            runtime_parallel=1,
             model_acquisition_time_ms=1234.5,
         )
         self.assertEqual(
@@ -204,6 +221,8 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
             "model_acquisition",
         )
         self.assertFalse(report["benchmark_valid"])
+        self.assertEqual(report["runtime_context_size"], 4096)
+        self.assertEqual(report["runtime_parallel"], 1)
         self.assertEqual(report["evaluated_sample_count"], 0)
         self.assertIsNone(report["precision"])
         self.assertEqual(
