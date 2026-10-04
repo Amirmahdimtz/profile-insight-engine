@@ -113,6 +113,63 @@ class CandidateSpec:
     hf_model: str
 
 
+def _rejected_candidate_report(
+    *,
+    candidate: CandidateSpec,
+    stage: str,
+    reason: str,
+    sample_count: int,
+    request_timeout_seconds: int,
+    max_tokens: int,
+    max_observations_per_kind: int,
+    max_label_chars: int,
+    max_caption_chars: int,
+    model_acquisition_time_ms: float | None = None,
+    model_load_time_ms: float | None = None,
+    runtime_peak_ram_mb: float | None = None,
+    vram_peak_mb: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "candidate": candidate.name,
+        "candidate_status": "rejected_preflight",
+        "rejection_stage": stage,
+        "hf_model": candidate.hf_model,
+        "provider": "llama_cpp",
+        "provider_version": None,
+        "model_path": None,
+        "model_sha256": None,
+        "request_timeout_seconds": request_timeout_seconds,
+        "max_tokens": max_tokens,
+        "max_observations_per_kind": max_observations_per_kind,
+        "max_label_chars": max_label_chars,
+        "max_caption_chars": max_caption_chars,
+        "sample_count": sample_count,
+        "evaluated_sample_count": 0,
+        "failed_sample_count": 1,
+        "benchmark_valid": False,
+        "failure_reasons": {reason: 1},
+        "preflight_sample_id": None,
+        "preflight_latency_ms": None,
+        "evaluated_label_types": [],
+        "precision": None,
+        "recall": None,
+        "f1": None,
+        "unsupported_claim_rate_pre_policy": None,
+        "unsupported_claim_rate_post_validation": None,
+        "p50_latency_ms": None,
+        "p95_latency_ms": None,
+        "model_acquisition_time_ms": model_acquisition_time_ms,
+        "model_acquisition_skipped": False,
+        "existing_runtime_reused": False,
+        "model_load_time_ms": model_load_time_ms,
+        "runtime_peak_ram_mb": runtime_peak_ram_mb,
+        "vram_peak_mb": vram_peak_mb,
+        "determinism_sample_count": 0,
+        "deterministic_rerun": None,
+        "per_label_type": {},
+    }
+
+
 def _parse_candidate(value: str) -> CandidateSpec:
     if not isinstance(value, str) or not value.strip():
         raise argparse.ArgumentTypeError(
@@ -831,6 +888,26 @@ async def run_vision_benchmark_async(
         using_existing_runtime = (
             existing_runtime_base_url is not None
         )
+        effective_request_timeout_seconds = (
+            request_timeout_seconds
+            or base_settings.request_timeout_seconds
+        )
+        effective_max_tokens = (
+            max_tokens
+            or base_settings.max_tokens
+        )
+        effective_max_observations_per_kind = (
+            max_observations_per_kind
+            or base_settings.max_observations_per_kind
+        )
+        effective_max_label_chars = (
+            max_label_chars
+            or base_settings.max_label_chars
+        )
+        effective_max_caption_chars = (
+            max_caption_chars
+            or base_settings.max_caption_chars
+        )
         if not skip_model_acquisition and not using_existing_runtime:
             acquisition_port = _free_port()
             acquisition_base_url = (
@@ -844,6 +921,7 @@ async def run_vision_benchmark_async(
                     offline=False,
                 )
             )
+            acquisition_started = time.perf_counter()
             try:
                 try:
                     model_acquisition_time_ms = (
@@ -854,11 +932,38 @@ async def run_vision_benchmark_async(
                             acquisition_process,
                         )
                     )
-                except RuntimeError as exc:
-                    raise RuntimeError(
-                        f"vision candidate '{candidate.name}' "
-                        "model acquisition failed"
-                    ) from exc
+                except RuntimeError:
+                    model_acquisition_time_ms = (
+                        time.perf_counter()
+                        - acquisition_started
+                    ) * 1000.0
+                    candidate_reports.append(
+                        _rejected_candidate_report(
+                            candidate=candidate,
+                            stage="model_acquisition",
+                            reason=(
+                                "RuntimeError: model acquisition failed"
+                            ),
+                            sample_count=len(eval_samples),
+                            request_timeout_seconds=(
+                                effective_request_timeout_seconds
+                            ),
+                            max_tokens=effective_max_tokens,
+                            max_observations_per_kind=(
+                                effective_max_observations_per_kind
+                            ),
+                            max_label_chars=(
+                                effective_max_label_chars
+                            ),
+                            max_caption_chars=(
+                                effective_max_caption_chars
+                            ),
+                            model_acquisition_time_ms=(
+                                model_acquisition_time_ms
+                            ),
+                        )
+                    )
+                    continue
             finally:
                 _stop_runtime(acquisition_process)
 
@@ -882,6 +987,7 @@ async def run_vision_benchmark_async(
                 process.pid
             )
             resource_monitor.start()
+            load_started = time.perf_counter()
             try:
                 model_load_time_ms = await asyncio.to_thread(
                     _wait_for_health,
@@ -889,11 +995,49 @@ async def run_vision_benchmark_async(
                     startup_timeout_seconds,
                     process,
                 )
-            except RuntimeError as exc:
-                raise RuntimeError(
-                    f"vision candidate '{candidate.name}' "
-                    "offline model load failed"
-                ) from exc
+            except RuntimeError:
+                model_load_time_ms = (
+                    time.perf_counter()
+                    - load_started
+                ) * 1000.0
+                resource_monitor.stop()
+                _stop_runtime(process)
+                candidate_reports.append(
+                    _rejected_candidate_report(
+                        candidate=candidate,
+                        stage="offline_model_load",
+                        reason=(
+                            "RuntimeError: offline model load failed"
+                        ),
+                        sample_count=len(eval_samples),
+                        request_timeout_seconds=(
+                            effective_request_timeout_seconds
+                        ),
+                        max_tokens=effective_max_tokens,
+                        max_observations_per_kind=(
+                            effective_max_observations_per_kind
+                        ),
+                        max_label_chars=(
+                            effective_max_label_chars
+                        ),
+                        max_caption_chars=(
+                            effective_max_caption_chars
+                        ),
+                        model_acquisition_time_ms=(
+                            model_acquisition_time_ms
+                        ),
+                        model_load_time_ms=(
+                            model_load_time_ms
+                        ),
+                        runtime_peak_ram_mb=(
+                            resource_monitor.peak_ram_mb
+                        ),
+                        vram_peak_mb=(
+                            resource_monitor.peak_vram_mb
+                        ),
+                    )
+                )
+                continue
         try:
             props = await asyncio.to_thread(
                 _runtime_props,
@@ -904,30 +1048,19 @@ async def run_vision_benchmark_async(
             settings = LlamaCppVisionSettings(
                 base_url=base_url,
                 request_timeout_seconds=(
-                    request_timeout_seconds
-                    or base_settings.request_timeout_seconds
+                    effective_request_timeout_seconds
                 ),
                 model_id=candidate.hf_model,
                 model_version=candidate.name,
                 config_version=(
                     base_settings.config_version
                 ),
-                max_tokens=(
-                    max_tokens
-                    or base_settings.max_tokens
-                ),
+                max_tokens=effective_max_tokens,
                 max_observations_per_kind=(
-                    max_observations_per_kind
-                    or base_settings.max_observations_per_kind
+                    effective_max_observations_per_kind
                 ),
-                max_label_chars=(
-                    max_label_chars
-                    or base_settings.max_label_chars
-                ),
-                max_caption_chars=(
-                    max_caption_chars
-                    or base_settings.max_caption_chars
-                ),
+                max_label_chars=effective_max_label_chars,
+                max_caption_chars=effective_max_caption_chars,
                 temperature=base_settings.temperature,
                 top_p=base_settings.top_p,
                 seed=base_settings.seed,
