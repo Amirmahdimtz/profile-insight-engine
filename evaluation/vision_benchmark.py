@@ -124,6 +124,8 @@ def _rejected_candidate_report(
     max_observations_per_kind: int,
     max_label_chars: int,
     max_caption_chars: int,
+    runtime_context_size: int,
+    runtime_parallel: int,
     model_acquisition_time_ms: float | None = None,
     model_load_time_ms: float | None = None,
     runtime_peak_ram_mb: float | None = None,
@@ -143,6 +145,8 @@ def _rejected_candidate_report(
         "max_observations_per_kind": max_observations_per_kind,
         "max_label_chars": max_label_chars,
         "max_caption_chars": max_caption_chars,
+        "runtime_context_size": runtime_context_size,
+        "runtime_parallel": runtime_parallel,
         "sample_count": sample_count,
         "evaluated_sample_count": 0,
         "failed_sample_count": 1,
@@ -283,6 +287,8 @@ def _runtime_command(
     port: int,
     *,
     offline: bool,
+    context_size: int,
+    parallel: int,
 ) -> list[str]:
     command = [
         runtime_executable,
@@ -292,6 +298,10 @@ def _runtime_command(
         "127.0.0.1",
         "--port",
         str(port),
+        "--ctx-size",
+        str(context_size),
+        "--parallel",
+        str(parallel),
         "--log-disable",
     ]
     if offline:
@@ -869,6 +879,12 @@ async def run_vision_benchmark_async(
             "vision.model_acquisition_timeout_seconds"
         )
     )
+    runtime_context_size = config.get_positive_int(
+        "vision.runtime_context_size"
+    )
+    runtime_parallel = config.get_positive_int(
+        "vision.runtime_parallel"
+    )
     image_service = ImageProcessingService(
         config,
         LocalImageStorage(),
@@ -919,6 +935,8 @@ async def run_vision_benchmark_async(
                     candidate,
                     acquisition_port,
                     offline=False,
+                    context_size=runtime_context_size,
+                    parallel=runtime_parallel,
                 )
             )
             acquisition_started = time.perf_counter()
@@ -958,6 +976,10 @@ async def run_vision_benchmark_async(
                             max_caption_chars=(
                                 effective_max_caption_chars
                             ),
+                            runtime_context_size=(
+                                runtime_context_size
+                            ),
+                            runtime_parallel=runtime_parallel,
                             model_acquisition_time_ms=(
                                 model_acquisition_time_ms
                             ),
@@ -981,6 +1003,8 @@ async def run_vision_benchmark_async(
                     candidate,
                     port,
                     offline=True,
+                    context_size=runtime_context_size,
+                    parallel=runtime_parallel,
                 )
             )
             resource_monitor = _RuntimeResourceMonitor(
@@ -1023,6 +1047,8 @@ async def run_vision_benchmark_async(
                         max_caption_chars=(
                             effective_max_caption_chars
                         ),
+                        runtime_context_size=runtime_context_size,
+                        runtime_parallel=runtime_parallel,
                         model_acquisition_time_ms=(
                             model_acquisition_time_ms
                         ),
@@ -1524,6 +1550,8 @@ async def run_vision_benchmark_async(
                     ),
                     "max_label_chars": settings.max_label_chars,
                     "max_caption_chars": settings.max_caption_chars,
+                    "runtime_context_size": runtime_context_size,
+                    "runtime_parallel": runtime_parallel,
                     "sample_count": len(
                         eval_samples
                     ),
