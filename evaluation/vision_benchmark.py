@@ -1162,6 +1162,7 @@ async def run_vision_benchmark_async(
                             {
                                 "candidate": candidate.name,
                                 "candidate_status": "rejected_preflight",
+                                "rejection_stage": "inference_preflight",
                                 "hf_model": candidate.hf_model,
                                 "provider": "llama_cpp",
                                 "provider_version": props.get(
@@ -1182,6 +1183,10 @@ async def run_vision_benchmark_async(
                                 "max_caption_chars": (
                                     settings.max_caption_chars
                                 ),
+                                "runtime_context_size": (
+                                    runtime_context_size
+                                ),
+                                "runtime_parallel": runtime_parallel,
                                 "sample_count": len(eval_samples),
                                 "evaluated_sample_count": 0,
                                 "failed_sample_count": 1,
