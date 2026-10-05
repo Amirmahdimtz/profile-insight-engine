@@ -213,8 +213,37 @@ Expected report schema is `phase8-insight-benchmark-v1`. `metric_scope` must be 
 
 The generated `phase8_insight_benchmark.json` may appear as an untracked local artifact; tracked production/test/documentation files must remain clean after verification.
 
+## Verified local evidence
+
+Target-Windows verification was completed against the Phase 8 implementation commit `ef718cde5d3ad9f083563c1c1396e7436a9c83e1`.
+
+- verified source commit before closure: `ef718cde5d3ad9f083563c1c1396e7436a9c83e1`
+- compile/import check: passed with `python -m compileall -q src evaluation tests`
+- Phase 8 focused unit/architecture/documentation suite: 25 tests passed in 2.315 seconds
+- benchmark schema: `phase8-insight-benchmark-v1`
+- benchmark metric scope: `synthetic_contract_scenarios_not_product_quality`
+- benchmark policy version: `phase8-candidate-v1`
+- benchmark aggregate count: `4`
+- expected supported Insight count: `2`
+- generated Insight count: `2`
+- synthetic contract insight precision: `1.0`
+- synthetic contract insight recall: `1.0`
+- false unsupported Insight rate: `0.0`
+- structural summary factuality: `1.0`
+- confidence calibration: unavailable / null by design because no labeled Insight correctness outcomes are committed
+- human review agreement: unavailable / null by design because no independent human Insight annotations are committed
+- deterministic rerun: `true`
+- reversed-input deterministic: `true`
+- deterministic result hash: `4350b2e4394bc3159570586e2a0e6b392138b529e89b8a64c04ae3069466fb88`
+- PowerShell reproducibility and summary-factuality guards completed without throwing
+- full repository regression: 271 tests passed with no failures or errors in 8.595 seconds
+- working tree contained only untracked benchmark/evidence JSON artifacts from Phases 4-8; no tracked production, test, configuration, or documentation changes were pending
+- local `HEAD` matched the verified implementation commit `ef718cde5d3ad9f083563c1c1396e7436a9c83e1`
+
+These results satisfy the Phase 8 deterministic eligibility/ranking, evidence traceability, sensitive-inference boundary, summary factuality, reproducibility, architecture, and repository-regression acceptance requirements. The synthetic benchmark remains explicitly non-product-quality evidence; no product precision, confidence calibration, or human-review metric is inferred beyond what the available annotations support.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 8 is implemented only after the atomic implementation commit reaches `main`. It remains open until the user runs the target-machine verification commands and returns the real outputs. Phase 9 must not begin before explicit user instruction after Phase 8 closure.
+Phase 8 is locally verified on the target Windows environment. Its Insight eligibility/scoring, deterministic ranking, evidence-backed explanations, summary factuality guard, sensitive-inference regressions, semantic-only handling, configuration validation, architecture boundaries, and contract benchmark are complete for this phase. Phase 9 must not begin until the user explicitly requests the next phase.
