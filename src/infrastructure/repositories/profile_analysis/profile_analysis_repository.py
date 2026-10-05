@@ -93,3 +93,28 @@ class ProfileAnalysisRepository(BaseRepository[ProfileAnalysisModel]):
             except Exception:
                 await session.rollback()
                 raise
+
+    async def fail_interrupted_async(self) -> int:
+        """Fail unfinished rows left by a previous single-worker process lifetime."""
+
+        async with self._db_context.session() as session:
+            try:
+                statement = (
+                    update(ProfileAnalysisModel)
+                    .where(
+                        ProfileAnalysisModel.status.in_(
+                            (
+                                ProfileAnalysisStatus.PENDING.value,
+                                ProfileAnalysisStatus.IN_PROGRESS.value,
+                            )
+                        ),
+                        ProfileAnalysisModel.result_payload.is_(None),
+                    )
+                    .values(status=ProfileAnalysisStatus.FAILED.value)
+                )
+                result = await session.execute(statement)
+                await session.commit()
+                return int(result.rowcount or 0)
+            except Exception:
+                await session.rollback()
+                raise

@@ -2,21 +2,37 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
 
+from src.core.services.profile_analysis.profile_analysis_service import ProfileAnalysisService
 from src.infrastructure.di.inject import inject
+from src.infrastructure.providers.image.local_image_storage import LocalImageStorage
 from src.infrastructure.utils.config_reader import ConfigReader
 
 
 @inject
 class WebService:
-    def __init__(self, config_reader: ConfigReader):
+    def __init__(
+        self,
+        config_reader: ConfigReader,
+        profile_analysis_service: ProfileAnalysisService,
+        image_storage: LocalImageStorage,
+    ):
         self._api_prefix = config_reader.get_non_empty_string("api.prefix").rstrip("/")
+        self._profile_analysis_service = profile_analysis_service
+        self._image_storage = image_storage
 
     def create_app(self) -> FastAPI:
-        app = FastAPI(title="Profile Insight Engine")
+        @asynccontextmanager
+        async def lifespan(_app: FastAPI):
+            await self._image_storage.cleanup_all_scopes_async()
+            await self._profile_analysis_service.recover_interrupted_async()
+            yield
+
+        app = FastAPI(title="Profile Insight Engine", lifespan=lifespan)
         application_root = Path(__file__).resolve().parent
         for feature_dir in sorted(application_root.iterdir(), key=lambda path: path.name):
             if not feature_dir.is_dir() or feature_dir.name.startswith("_"):

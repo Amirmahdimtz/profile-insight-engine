@@ -168,6 +168,9 @@ class ProfileAnalysisService:
                 except Exception:
                     pass
 
+    async def recover_interrupted_async(self) -> int:
+        return await self._profile_analysis_repository.fail_interrupted_async()
+
     async def get_status_async(self, analysis_id: str) -> ProfileAnalysisLifecycle:
         entity = await self._profile_analysis_repository.get_by_id_async(analysis_id)
         if entity is None:
