@@ -34,6 +34,10 @@ class LocalImageStorage:
     async def cleanup_scope_async(self, scope_reference: str) -> None:
         await asyncio.to_thread(self._cleanup_scope, scope_reference)
 
+    async def cleanup_stale_scopes_async(self) -> int:
+        """Remove temp artifacts left by an earlier local service process before startup."""
+        return await asyncio.to_thread(self._cleanup_stale_scopes)
+
     def _create_scope(self, analysis_id: str) -> str:
         self._root.mkdir(mode=0o700, parents=True, exist_ok=True)
         analysis_token = hashlib.sha256(analysis_id.encode("utf-8")).hexdigest()[:16]
@@ -82,3 +86,28 @@ class LocalImageStorage:
         scope = self._owned_scope(scope_reference)
         if scope.exists():
             shutil.rmtree(scope)
+
+    def _cleanup_stale_scopes(self) -> int:
+        if not self._root.exists():
+            return 0
+        if not self._root.is_dir() or self._root.is_symlink():
+            raise ImageStorageError("temporary image storage root is invalid")
+        removed = 0
+        try:
+            for child in tuple(self._root.iterdir()):
+                if child.is_symlink() or child.is_file():
+                    child.unlink()
+                elif child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    raise ImageStorageError(
+                        "temporary image storage contains unsupported entry"
+                    )
+                removed += 1
+        except ImageStorageError:
+            raise
+        except OSError as exc:
+            raise ImageStorageError(
+                "unable to clean stale temporary image storage"
+            ) from exc
+        return removed
