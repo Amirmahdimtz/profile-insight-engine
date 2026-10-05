@@ -39,7 +39,7 @@ _ALLOWED_TRANSITIONS = {
 
 
 class ProfileAnalysisServiceError(RuntimeError):
-    """Base Phase 9 workflow error with transport-neutral semantics."""
+    """Transport-neutral profile-analysis workflow error."""
 
 
 class ProfileAnalysisAlreadyExistsError(ProfileAnalysisServiceError):
@@ -96,6 +96,10 @@ class ProfileAnalysisService:
             )
         except RepositoryAlreadyExistsError as exc:
             raise ProfileAnalysisAlreadyExistsError(str(exc)) from exc
+        except Exception as exc:
+            raise ProfileAnalysisExecutionError(
+                "profile analysis could not be initialized"
+            ) from exc
 
         await self._transition_async(
             request.analysis_id,
@@ -158,6 +162,9 @@ class ProfileAnalysisService:
         except (ProfileAnalysisInputError, ProfileAnalysisTransitionError):
             await self._mark_failed_async(request.analysis_id)
             raise
+        except ProfileAnalysisExecutionError:
+            await self._mark_failed_async(request.analysis_id)
+            raise
         except Exception as exc:
             await self._mark_failed_async(request.analysis_id)
             raise ProfileAnalysisExecutionError("profile analysis execution failed") from exc
@@ -169,13 +176,13 @@ class ProfileAnalysisService:
                     pass
 
     async def get_status_async(self, analysis_id: str) -> ProfileAnalysisLifecycle:
-        entity = await self._profile_analysis_repository.get_by_id_async(analysis_id)
+        entity = await self._load_entity_async(analysis_id)
         if entity is None:
             raise ProfileAnalysisNotFoundError(f"analysis '{analysis_id}' not found")
         return self._to_lifecycle(entity)
 
     async def get_result_async(self, analysis_id: str) -> CompletedProfileAnalysis:
-        entity = await self._profile_analysis_repository.get_by_id_async(analysis_id)
+        entity = await self._load_entity_async(analysis_id)
         if entity is None:
             raise ProfileAnalysisNotFoundError(f"analysis '{analysis_id}' not found")
         status = self._parse_status(entity.status)
@@ -189,6 +196,25 @@ class ProfileAnalysisService:
         if completed.result.analysis_id != analysis_id:
             raise ProfileAnalysisExecutionError("persisted result analysis_id does not match its row")
         return completed
+
+    async def recover_interrupted_async(self) -> int:
+        """Fail jobs that cannot be resumed after a local process restart."""
+        try:
+            return await self._profile_analysis_repository.fail_unfinished_async()
+        except Exception as exc:
+            raise ProfileAnalysisExecutionError(
+                "profile analysis restart recovery failed"
+            ) from exc
+
+    async def _load_entity_async(
+        self, analysis_id: str
+    ) -> ProfileAnalysisModel | None:
+        try:
+            return await self._profile_analysis_repository.get_by_id_async(analysis_id)
+        except Exception as exc:
+            raise ProfileAnalysisExecutionError(
+                "profile analysis state could not be loaded"
+            ) from exc
 
     async def _transition_async(
         self,
@@ -215,6 +241,10 @@ class ProfileAnalysisService:
             )
         except RepositoryTransitionConflictError as exc:
             raise ProfileAnalysisTransitionError(str(exc)) from exc
+        except Exception as exc:
+            raise ProfileAnalysisExecutionError(
+                "profile analysis state transition failed"
+            ) from exc
 
     async def _mark_failed_async(self, analysis_id: str) -> None:
         try:
@@ -223,7 +253,7 @@ class ProfileAnalysisService:
                 ProfileAnalysisStatus.IN_PROGRESS,
                 ProfileAnalysisStatus.FAILED,
             )
-        except ProfileAnalysisTransitionError as exc:
+        except (ProfileAnalysisTransitionError, ProfileAnalysisExecutionError) as exc:
             raise ProfileAnalysisExecutionError(
                 "analysis failure state could not be persisted"
             ) from exc
