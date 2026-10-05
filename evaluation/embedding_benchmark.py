@@ -213,7 +213,7 @@ def _calculate_semantic_metrics(eval_samples, result, labels: tuple[str, ...], r
     }
 
 
-async def _run(args: argparse.Namespace) -> dict[str, object]:
+async def _run_async(args: argparse.Namespace) -> dict[str, object]:
     manifest = _load_manifest(Path(args.manifest))
     dataset_root = Path(args.dataset_root).resolve()
     content_fingerprint = manifest.validate_references(dataset_root)
@@ -323,7 +323,7 @@ def main() -> int:
     args = _parser().parse_args()
     if args.iterations <= 0 or args.recall_k <= 0:
         raise SystemExit("--iterations and --recall-k must be positive")
-    report = asyncio.run(_run(args))
+    report = asyncio.run(_run_async(args))
     output = Path(args.output)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return 0
