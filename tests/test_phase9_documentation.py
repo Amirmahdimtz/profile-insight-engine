@@ -19,15 +19,14 @@ class Phase9DocumentationTests(unittest.TestCase):
         self.assertIn("phase9-analysis-result-v1", text)
         self.assertIn("metadata.raw_text", text)
         self.assertIn("SemanticThemeService` is not invoked", text)
-        self.assertIn("python -m alembic -c src/infrastructure/alembic.ini upgrade head", text)
-        self.assertIn("python -m alembic -c src/infrastructure/alembic.ini downgrade base", text)
-        self.assertIn("python -m evaluation.phase9_api_persistence_benchmark", text)
-        self.assertIn("python -m unittest discover", text)
-        self.assertIn("git rev-parse HEAD", text)
-        self.assertIn("docker rm -f -v profile-insight-phase9-postgres", text)
-        self.assertIn("NewGuid().ToString(\"N\")", text)
-        self.assertIn("app.openapi()", text)
-        self.assertNotIn("r.methods or []", text)
+        self.assertIn("python scripts/verify_phase9.py", text)
+        self.assertIn("POSTGRES_HOST_AUTH_METHOD=trust", text)
+        self.assertIn("127.0.0.1", text)
+        self.assertIn("stops at the first failing check", text)
+        self.assertIn("entire repository regression suite in quiet mode", text)
+        self.assertIn("phase9_api_persistence_benchmark.json", text)
+        self.assertNotIn("PHASE9_DB_PASSWORD", text)
+        self.assertNotIn("NewGuid().ToString", text)
 
 
 if __name__ == "__main__":

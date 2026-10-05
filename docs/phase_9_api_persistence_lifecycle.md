@@ -100,7 +100,13 @@ Its schema is `phase9-api-persistence-benchmark-v1` and its scope is explicitly 
 
 ## Local verification
 
-Run from the repository root in PowerShell.
+Run from the repository root. The verification path intentionally avoids shell-managed database credentials because repeated local runs showed that stale/mismatched PostgreSQL credentials can make every later DB check fail with the same secondary error.
+
+Prerequisites:
+
+- Python dependencies from `requirements.txt` are installed.
+- Docker Desktop / Docker Engine is running.
+- The current branch is `main` and tracked files are clean.
 
 ### 1. Synchronize and install
 
@@ -111,131 +117,35 @@ git pull --ff-only origin main
 python -m pip install -r requirements.txt
 ```
 
-### 2. Configure a disposable Phase 9 PostgreSQL database
-
-Use an existing disposable PostgreSQL database, or start one with Docker. Do not use a production database for migration downgrade/integration tests.
+### 2. Run the single fail-fast verifier
 
 ```powershell
-docker rm -f -v profile-insight-phase9-postgres 2>$null | Out-Null
-
-$env:PHASE9_DB_PASSWORD = (
-  [guid]::NewGuid().ToString("N") +
-  [guid]::NewGuid().ToString("N")
-)
-
-docker run --name profile-insight-phase9-postgres `
-  --env "POSTGRES_USER=postgres" `
-  --env "POSTGRES_PASSWORD=$env:PHASE9_DB_PASSWORD" `
-  --env "POSTGRES_DB=profile_insight_phase9_test" `
-  -p 55432:5432 `
-  -d postgres:17-alpine
-if ($LASTEXITCODE -ne 0) { throw "PostgreSQL container startup failed" }
-
-$DatabaseReady = $false
-for ($Attempt = 0; $Attempt -lt 30; $Attempt++) {
-  docker exec profile-insight-phase9-postgres pg_isready -U postgres -d profile_insight_phase9_test | Out-Null
-  if ($LASTEXITCODE -eq 0) {
-    $DatabaseReady = $true
-    break
-  }
-  Start-Sleep -Seconds 1
-}
-if (-not $DatabaseReady) {
-  docker logs profile-insight-phase9-postgres
-  throw "PostgreSQL did not become ready"
-}
-
-$env:PROFILE_INSIGHT_DATABASE_URL = "postgresql+asyncpg://postgres:$env:PHASE9_DB_PASSWORD@127.0.0.1:55432/profile_insight_phase9_test"
-$env:PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL = $env:PROFILE_INSIGHT_DATABASE_URL
-
-python -m alembic -c src/infrastructure/alembic.ini current
-if ($LASTEXITCODE -ne 0) {
-  docker logs profile-insight-phase9-postgres
-  throw "PostgreSQL authentication preflight failed"
-}
+python scripts/verify_phase9.py
+if ($LASTEXITCODE -ne 0) { throw "Phase 9 local verification failed" }
 ```
 
-If PostgreSQL is already available, set the same two environment variables to the disposable database URL instead.
+The verifier owns the disposable database lifecycle and stops at the first failing check. It:
 
-### 3. Compile/import and focused non-DB tests
+1. verifies `main` and rejects tracked local modifications;
+2. verifies the Docker daemon is reachable;
+3. chooses an unused loopback port and starts a uniquely named `postgres:17-alpine` container;
+4. enables `POSTGRES_HOST_AUTH_METHOD=trust` **only inside that disposable test container**, binds PostgreSQL only to `127.0.0.1`, and does not create/store a database password;
+5. supplies `PROFILE_INSIGHT_DATABASE_URL` and `PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL` only to verifier child processes;
+6. performs an actual host-side Alembic connection preflight before any DB-dependent tests;
+7. runs compile/import checks and focused Phase 9 contract/service/controller/architecture/DI/documentation/verifier tests;
+8. applies the real Alembic migration and checks metadata drift;
+9. runs PostgreSQL repository integration tests;
+10. verifies destructive downgrade followed by re-upgrade on the disposable database;
+11. verifies the discovered HTTP surface from the generated OpenAPI document;
+12. runs the Phase 9 API/persistence benchmark and validates its schema/scope;
+13. runs the entire repository regression suite in quiet mode so successful test names do not flood the terminal;
+14. verifies tracked Git state again and always removes the disposable PostgreSQL container in `finally`.
 
-```powershell
-python -m compileall -q src evaluation tests
-if ($LASTEXITCODE -ne 0) { throw "compileall failed" }
-python -m unittest tests.test_phase9_contracts tests.test_profile_analysis_service tests.test_profile_analysis_controller tests.test_phase9_architecture tests.test_phase9_di_discovery tests.test_phase9_documentation -v
-if ($LASTEXITCODE -ne 0) { throw "Phase 9 focused tests failed" }
-```
+The test-only `trust` setting is deliberately scoped to a short-lived container published on loopback only. Production/runtime database configuration remains unchanged and still comes from the configured environment variable.
 
-### 4. Migration metadata, upgrade and check
+If a step fails, do not continue with later commands manually. The verifier exits immediately with a section name such as `Database host-connection preflight`, `PostgreSQL integration tests`, or `Full repository regression`; return that output for diagnosis. This prevents one infrastructure failure from producing a long cascade of misleading secondary errors.
 
-```powershell
-python -m alembic -c src/infrastructure/alembic.ini current
-python -m alembic -c src/infrastructure/alembic.ini upgrade head
-if ($LASTEXITCODE -ne 0) { throw "Alembic upgrade failed" }
-python -m alembic -c src/infrastructure/alembic.ini current
-python -m alembic -c src/infrastructure/alembic.ini check
-if ($LASTEXITCODE -ne 0) { throw "Alembic metadata is not in sync" }
-```
-
-### 5. PostgreSQL integration tests
-
-These tests use the already-migrated Phase 9 table in the database referenced by `PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL` and delete only their test rows before/after the suite. The database must still be disposable because the later migration downgrade is destructive.
-
-```powershell
-python -m unittest tests.test_profile_analysis_repository_integration -v
-if ($LASTEXITCODE -ne 0) { throw "Phase 9 PostgreSQL integration tests failed" }
-```
-
-### 6. Destructive migration downgrade/upgrade verification — disposable DB only
-
-The next command drops the `profile_analysis` table. Run it only against the disposable Phase 9 database configured above.
-
-```powershell
-python -m alembic -c src/infrastructure/alembic.ini downgrade base
-if ($LASTEXITCODE -ne 0) { throw "Alembic downgrade failed" }
-python -m alembic -c src/infrastructure/alembic.ini upgrade head
-if ($LASTEXITCODE -ne 0) { throw "Alembic re-upgrade failed" }
-python -m alembic -c src/infrastructure/alembic.ini current
-```
-
-### 7. DI/discovery and route smoke check
-
-```powershell
-python -c "from src.infrastructure.di.bootstrap import bootstrap_di; bootstrap_di(); from src.application.web import WebService; from src.infrastructure.di.inject import resolve; app=resolve(WebService).create_app(); spec=app.openapi(); methods={'get','post','put','patch','delete'}; print(sorted((method.upper(), path) for path, operations in spec['paths'].items() for method in operations if method in methods and path.startswith('/api/')))"
-if ($LASTEXITCODE -ne 0) { throw "DI/discovery route smoke check failed" }
-```
-
-Expected application routes include:
-
-- `POST /api/v1/profile_analysis/`
-- `GET /api/v1/profile_analysis/{analysis_id}`
-- `GET /api/v1/profile_analysis/{analysis_id}/result`
-
-### 8. Phase 9 API/persistence benchmark
-
-```powershell
-python -m evaluation.phase9_api_persistence_benchmark --iterations 20 --concurrency 8 --output phase9_api_persistence_benchmark.json
-if ($LASTEXITCODE -ne 0) { throw "Phase 9 benchmark failed" }
-$Report = Get-Content .\phase9_api_persistence_benchmark.json -Raw | ConvertFrom-Json
-$Report | Select-Object schema_version,metric_scope,iterations,analysis_graph_size_bytes
-$Report.api | Format-List
-$Report.database | Format-List
-```
-
-Expected `schema_version` is `phase9-api-persistence-benchmark-v1` and `metric_scope` is `phase9_contract_and_persistence_not_end_to_end_ml`.
-
-### 9. Full regression and repository state
-
-```powershell
-python -m unittest discover -s tests -p "test_*.py" -v
-if ($LASTEXITCODE -ne 0) { throw "full regression failed" }
-git status --short
-git rev-parse HEAD
-```
-
-Generated benchmark JSON may appear as an untracked local artifact. No tracked production/test/config/documentation change should remain after verification.
-
-When verification is complete, remove the disposable container and its anonymous volume with `docker rm -f -v profile-insight-phase9-postgres`. Clear the three Phase 9 database environment variables from the shell afterward.
+The benchmark report is written to `phase9_api_persistence_benchmark.json`. It may remain as an untracked local evidence artifact; tracked files must remain clean.
 
 ## Expected result
 
