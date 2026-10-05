@@ -172,8 +172,42 @@ For candidate comparison, rerun the same command with each approved multimodal i
 - Benchmark output contains dataset/model/config traceability, Recall@K, mAP, theme F1, cross-language slice F1, latency and resource fields.
 - No candidate or threshold is promoted automatically.
 
+## Verified local evidence
+
+Target-Windows verification was completed on the authorized Phase 2 evaluation dataset after the final Phase 6 naming correction.
+
+- verified source commit before closure: `7cdc076e6da7a7e8df53aff9a73458def3fee5b3`
+- compile/import check: passed
+- Phase 6 architecture suite: 7 tests passed
+- full repository regression: 217 tests passed with no failures or errors
+- dataset_id: `profile_insight_real_eval`
+- dataset_version: `1.0.0`
+- manifest fingerprint: `06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc`
+- dataset-content fingerprint: `5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e`
+- report schema: `phase6-embedding-benchmark-v2`
+- model candidate: `google/siglip2-base-patch16-224`
+- provider/version: `transformers 5.18.0`
+- embedding dimension: `768`
+- mean Recall@5: `0.9907407407407407`
+- mAP: `0.9182539682539683`
+- theme Macro F1 at candidate threshold `0.25`: `0.0`
+- deterministic rerun: `true`
+- warm-up/model-load latency: `145587.7361 ms`
+- post-warmup full-eval p50 batch latency: `37288.23 ms`
+- post-warmup full-eval p95 batch latency: `42332.6675 ms`
+- peak process RAM: `2132.6171875 MB`
+- process VRAM: unavailable/not applicable for the CPU candidate run
+- near-duplicate groups detected on the current eval set: `0`
+- mixed Persian/English slice Macro F1: unavailable (`null`) because that slice lacks authorized ground-truth labels in the current dataset
+
+Similarity diagnostics explain the zero thresholded theme F1 rather than hiding it: the highest observed expected-label cosine similarity was `0.14266678429109328`, below the candidate threshold `0.25`, so the benchmark produced zero threshold matches. Retrieval quality remained strong. This result is retained as evidence and does not justify post-hoc threshold tuning from the eval set.
+
+The candidate model and both similarity thresholds therefore remain configurable and are **not** frozen as production-final. Broader candidate comparison and final production model/threshold selection remain a Phase 10 hardening/benchmark responsibility. Phase 6 closes because the provider-neutral contract, deterministic semantic/retrieval behavior, threshold configurability, safety validation, target-machine reproducibility, and required benchmark evidence have all been demonstrated.
+
+The local working tree contained only untracked benchmark JSON artifacts; no tracked production/test/documentation changes were pending at verification time.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 6 is implemented on `main` but is not `COMPLETE` and is not `READY_FOR_NEXT_PHASE` until target-Windows local verification and real benchmark evidence are provided and accepted.
+Phase 6 is locally verified on the target Windows environment. Its embedding contracts, provider boundary, semantic theme workflow, deterministic retrieval and near-duplicate logic, safety checks, resource measurements, and real-dataset benchmark evidence are complete for this phase. No embedding model or similarity threshold is declared production-final by this closure.
