@@ -2,3 +2,11 @@ Pillow==12.3.0
 PyYAML==6.0.3
 torch==2.14.1
 transformers==5.18.0
+fastapi==0.141.1
+pydantic==2.13.4
+uvicorn==0.52.1
+SQLAlchemy==2.0.51
+asyncpg==0.31.0
+alembic==1.20.0
+python-multipart==0.0.32
+httpx==0.28.1

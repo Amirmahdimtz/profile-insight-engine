@@ -57,3 +57,7 @@ insights:
   minimum_cross_image_consistency: 0.0
   minimum_average_confidence: 0.0
   source_diversity_saturation: 2
+api:
+  prefix: /api/v1
+database:
+  url_env: PROFILE_INSIGHT_DATABASE_URL
