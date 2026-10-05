@@ -48,3 +48,12 @@ embedding:
   local_files_only: false
   theme_similarity_threshold: 0.25
   near_duplicate_similarity_threshold: 0.95
+insights:
+  policy_version: phase8-candidate-v1
+  minimum_evidence_count: 2
+  minimum_unique_image_count: 2
+  minimum_image_coverage: 0.10
+  minimum_source_diversity: 1
+  minimum_cross_image_consistency: 0.0
+  minimum_average_confidence: 0.0
+  source_diversity_saturation: 2
