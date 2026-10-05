@@ -60,6 +60,42 @@ class EmbeddingBenchmarkTests(unittest.TestCase):
             metrics["cross_language_theme_macro_f1"]["mixed_persian_english"]
         )
 
+    def test_language_slice_without_ground_truth_is_reported_as_unavailable(self):
+        samples = (
+            sample("a", ("football",), ("english_heavy",)),
+            sample("b", (), ("mixed_persian_english",)),
+        )
+        result = SemanticThemeResult(
+            theme_similarities=(
+                ThemeSimilarityEvidence("a", "football", 0.9, 0.5),
+                ThemeSimilarityEvidence("b", "football", 0.1, 0.5),
+            ),
+            retrieval_results=(
+                SemanticRetrievalResult("football", ("a", "b"), (0.9, 0.1)),
+            ),
+            near_duplicate_groups=(),
+            provider="test",
+            provider_version="1",
+            model_id="model",
+            model_version="rev",
+            config_version="cfg",
+            embedding_dimension=2,
+        )
+        metrics = _calculate_semantic_metrics(
+            samples, result, ("football",), recall_k=1
+        )
+        self.assertIsNone(
+            metrics["cross_language_theme_macro_f1"]["mixed_persian_english"]
+        )
+        self.assertEqual(
+            metrics["theme_similarity_diagnostics"]["matched_count"],
+            1,
+        )
+        self.assertEqual(
+            metrics["theme_similarity_diagnostics"]["expected_score_max"],
+            0.9,
+        )
+
     def test_percentile_is_deterministic(self):
         self.assertEqual(_percentile([30.0, 10.0, 20.0], 0.5), 20.0)
         self.assertEqual(_percentile([], 0.95), 0.0)

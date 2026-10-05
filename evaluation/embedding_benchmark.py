@@ -22,16 +22,16 @@ from src.infrastructure.providers.image.local_image_storage import LocalImageSto
 from src.infrastructure.utils.config_reader import ConfigReader
 
 
-REPORT_SCHEMA_VERSION = "phase6-embedding-benchmark-v1"
+REPORT_SCHEMA_VERSION = "phase6-embedding-benchmark-v2"
 
 
 def _peak_ram_mb() -> float | None:
-    if sys.platform == "win32":
+    if sys.platform.startswith("win"):
         try:
             import ctypes
             from ctypes import wintypes
 
-            class Counters(ctypes.Structure):
+            class ProcessMemoryCounters(ctypes.Structure):
                 _fields_ = [
                     ("cb", wintypes.DWORD),
                     ("PageFaultCount", wintypes.DWORD),
@@ -45,21 +45,36 @@ def _peak_ram_mb() -> float | None:
                     ("PeakPagefileUsage", ctypes.c_size_t),
                 ]
 
-            counters = Counters()
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            psapi = ctypes.WinDLL("psapi", use_last_error=True)
+            kernel32.GetCurrentProcess.argtypes = []
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            psapi.GetProcessMemoryInfo.argtypes = [
+                wintypes.HANDLE,
+                ctypes.POINTER(ProcessMemoryCounters),
+                wintypes.DWORD,
+            ]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+
+            counters = ProcessMemoryCounters()
             counters.cb = ctypes.sizeof(counters)
-            handle = ctypes.windll.kernel32.GetCurrentProcess()
-            if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-                return counters.PeakWorkingSetSize / (1024 * 1024)
-        except Exception:
+            handle = kernel32.GetCurrentProcess()
+            if not psapi.GetProcessMemoryInfo(
+                handle,
+                ctypes.byref(counters),
+                counters.cb,
+            ):
+                return None
+            return float(counters.PeakWorkingSetSize) / (1024.0 * 1024.0)
+        except (OSError, AttributeError, ValueError):
             return None
-        return None
     try:
         import resource
 
         value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         divisor = 1024 * 1024 if sys.platform == "darwin" else 1024
         return value / divisor
-    except Exception:
+    except (ImportError, OSError, ValueError):
         return None
 
 
@@ -155,21 +170,46 @@ def _calculate_semantic_metrics(eval_samples, result, labels: tuple[str, ...], r
             for index, sample in enumerate(eval_samples)
             if any(item.value == slice_name for item in sample.slices)
         ]
+        has_ground_truth = any(expected_sets[index] for index in indices)
         cross_language_f1[slice_name] = (
             macro_f1(
                 [expected_sets[index] for index in indices],
                 [predicted_sets[index] for index in indices],
                 classes=labels,
             )
-            if indices
+            if indices and has_ground_truth
             else None
         )
+
+    expected_pairs = {
+        (sample.image.image_id, label.label)
+        for sample in eval_samples
+        for label in sample.ground_truth.labels
+    }
+    similarity_scores = [item.similarity for item in result.theme_similarities]
+    expected_similarity_scores = [
+        item.similarity
+        for item in result.theme_similarities
+        if (item.image_id, item.theme_label) in expected_pairs
+    ]
+    similarity_diagnostics = {
+        "matched_count": sum(1 for item in result.theme_similarities if item.matched),
+        "score_min": min(similarity_scores) if similarity_scores else None,
+        "score_max": max(similarity_scores) if similarity_scores else None,
+        "expected_score_min": (
+            min(expected_similarity_scores) if expected_similarity_scores else None
+        ),
+        "expected_score_max": (
+            max(expected_similarity_scores) if expected_similarity_scores else None
+        ),
+    }
 
     return {
         "theme_macro_f1": macro_f1(expected_sets, predicted_sets, classes=labels),
         "mean_recall_at_k": statistics.fmean(recall_values) if recall_values else 0.0,
         "map": map_value,
         "cross_language_theme_macro_f1": cross_language_f1,
+        "theme_similarity_diagnostics": similarity_diagnostics,
     }
 
 
@@ -207,6 +247,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         tuple(_raw_image(sample, dataset_root) for sample in eval_samples),
     )
     try:
+        warmup_started = time.perf_counter()
+        await semantic_service.analyze_async((batch.images[0],), labels)
+        warmup_latency_ms = (time.perf_counter() - warmup_started) * 1000.0
+
         latencies: list[float] = []
         results = []
         for _ in range(args.iterations):
@@ -241,7 +285,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             "recall_k": args.recall_k,
             "map": semantic_metrics["map"],
             "cross_language_theme_macro_f1": semantic_metrics["cross_language_theme_macro_f1"],
+            "theme_similarity_diagnostics": semantic_metrics["theme_similarity_diagnostics"],
             "iterations": args.iterations,
+            "warmup_latency_ms": warmup_latency_ms,
+            "latency_scope": "post_warmup_full_eval_batch",
             "p50_batch_latency_ms": _percentile(latencies, 0.50),
             "p95_batch_latency_ms": _percentile(latencies, 0.95),
             "peak_process_ram_mb": _peak_ram_mb(),

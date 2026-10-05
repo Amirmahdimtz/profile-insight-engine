@@ -65,8 +65,10 @@ For one model candidate it reports:
 - theme Macro F1 at the configured candidate threshold;
 - mean Recall@K;
 - mAP;
-- Persian-heavy, English-heavy and mixed Persian/English theme Macro F1 when those slices exist;
-- p50/p95 batch latency;
+- Persian-heavy, English-heavy and mixed Persian/English theme Macro F1 only when that slice has authorized ground-truth labels; otherwise the value is `null` rather than a fabricated perfect score;
+- one explicit warm-up/model-load latency measurement;
+- p50/p95 full-eval batch latency measured only after warm-up, so download/model-load time is not mixed into inference latency;
+- similarity diagnostics (match count and score ranges) for threshold interpretation without silently retuning the threshold;
 - process peak RAM where the OS exposes it;
 - process VRAM when `nvidia-smi` reports memory for the current process;
 - deterministic rerun equality when at least two iterations are used;
@@ -112,7 +114,9 @@ New-Item -ItemType Directory -Force -Path $env:PHASE6_REPORT_ROOT | Out-Null
 
 The first candidate run may require network access to populate the Hugging Face cache. After a candidate is cached, set `embedding.local_files_only: true` in a local uncommitted config copy if strict offline verification is required. Do not commit machine-specific cache paths or secrets.
 
-The current Phase 2 manifest does not encode authorized translation-equivalence pairs or human-labelled near-duplicate pairs. The benchmark therefore reports Persian-heavy, English-heavy and mixed-slice performance, while true paired cross-language equivalence quality and near-duplicate precision/recall remain dataset limitations until authorized annotations exist. Model outputs are never promoted to ground truth.
+The current Phase 2 manifest does not encode authorized translation-equivalence pairs or human-labelled near-duplicate pairs. The benchmark therefore reports Persian-heavy, English-heavy and mixed-slice performance only where those slices contain authorized labels, while true paired cross-language equivalence quality and near-duplicate precision/recall remain dataset limitations until authorized annotations exist. Model outputs are never promoted to ground truth.
+
+`phase6-embedding-benchmark-v1` reports are superseded for final Phase 6 acceptance because the first timed iteration included model acquisition/load and an unlabeled language slice could be reported as Macro F1 `1.0`. The corrected `phase6-embedding-benchmark-v2` performs an explicit warm-up before measured full-batch iterations and emits `null` for language slices without ground-truth coverage.
 
 ## Local verification commands
 
@@ -148,8 +152,9 @@ Inspect the report:
 
 ```powershell
 $Report = Get-Content "$env:PHASE6_REPORT_ROOT\siglip2-base-patch16-224.json" -Raw | ConvertFrom-Json
-$Report | Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,model_id,model_version,provider,provider_version,embedding_dimension,eval_sample_count,theme_label_count,theme_macro_f1,mean_recall_at_k,recall_k,map,p50_batch_latency_ms,p95_batch_latency_ms,peak_process_ram_mb,process_vram_mb,deterministic_rerun,near_duplicate_group_count
+$Report | Select-Object schema_version,dataset_id,dataset_version,manifest_fingerprint,dataset_content_fingerprint,model_id,model_version,provider,provider_version,embedding_dimension,eval_sample_count,theme_label_count,theme_macro_f1,mean_recall_at_k,recall_k,map,warmup_latency_ms,latency_scope,p50_batch_latency_ms,p95_batch_latency_ms,peak_process_ram_mb,process_vram_mb,deterministic_rerun,near_duplicate_group_count
 $Report.cross_language_theme_macro_f1 | ConvertTo-Json -Depth 4
+$Report.theme_similarity_diagnostics | ConvertTo-Json -Depth 4
 $Report.candidate_thresholds | ConvertTo-Json -Depth 4
 ```
 
