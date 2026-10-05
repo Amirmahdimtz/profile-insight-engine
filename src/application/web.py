@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
 
-from src.infrastructure.di.inject import inject
+from src.core.services.profile_analysis.profile_analysis_service import ProfileAnalysisService
+from src.infrastructure.di.inject import inject, resolve
+from src.infrastructure.providers.image.local_image_storage import LocalImageStorage
 from src.infrastructure.utils.config_reader import ConfigReader
 
 
@@ -16,7 +19,15 @@ class WebService:
         self._api_prefix = config_reader.get_non_empty_string("api.prefix").rstrip("/")
 
     def create_app(self) -> FastAPI:
-        app = FastAPI(title="Profile Insight Engine")
+        @asynccontextmanager
+        async def lifespan(_: FastAPI):
+            # Local deployment is a single service process. Any temp scopes that
+            # predate startup are therefore crash leftovers, not active requests.
+            await resolve(LocalImageStorage).cleanup_stale_scopes_async()
+            await resolve(ProfileAnalysisService).recover_interrupted_async()
+            yield
+
+        app = FastAPI(title="Profile Insight Engine", lifespan=lifespan)
         application_root = Path(__file__).resolve().parent
         for feature_dir in sorted(application_root.iterdir(), key=lambda path: path.name):
             if not feature_dir.is_dir() or feature_dir.name.startswith("_"):
