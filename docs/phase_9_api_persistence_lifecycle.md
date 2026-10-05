@@ -38,7 +38,7 @@ or
 
 Terminal states have no outgoing transition. `ProfileAnalysisService` owns the transition rules. `ProfileAnalysisRepository` only performs conditional compare-and-set updates against the expected persisted status, so stale/concurrent transitions fail deterministically.
 
-A completed transition requires its result payload in the same SQL statement. Non-completed states are constrained to `result_payload IS NULL`. A failed analysis therefore cannot expose a partial result as successful.
+A completed transition requires its result payload in the same SQL statement. Non-completed states are constrained to `result_payload IS NULL`. The SQLAlchemy JSONB mapping explicitly uses `none_as_null=True` so Python `None` is persisted as SQL `NULL`, not JSON `null`; this keeps ORM writes consistent with the database constraint. A failed analysis therefore cannot expose a partial result as successful.
 
 ## Orchestration of prior phases
 

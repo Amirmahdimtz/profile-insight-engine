@@ -237,6 +237,7 @@ def main() -> int:
                 "tests.test_phase9_contracts",
                 "tests.test_profile_analysis_service",
                 "tests.test_profile_analysis_controller",
+                "tests.test_profile_analysis_repository",
                 "tests.test_phase9_architecture",
                 "tests.test_phase9_di_discovery",
                 "tests.test_phase9_documentation",

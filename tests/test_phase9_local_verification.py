@@ -33,6 +33,7 @@ class Phase9LocalVerificationTests(unittest.TestCase):
             "compileall",
             "tests.test_phase9_contracts",
             "tests.test_phase9_di_discovery",
+            "tests.test_profile_analysis_repository",
             "tests.test_profile_analysis_repository_integration",
             "alembic",
             "downgrade",

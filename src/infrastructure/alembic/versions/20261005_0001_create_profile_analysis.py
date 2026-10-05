@@ -23,7 +23,11 @@ def upgrade() -> None:
         sa.Column("analysis_id", sa.Text(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("image_ids", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("result_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "result_payload",
+            postgresql.JSONB(none_as_null=True, astext_type=sa.Text()),
+            nullable=True,
+        ),
         sa.Column(
             "creation_datetime",
             sa.DateTime(timezone=True),

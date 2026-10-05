@@ -26,7 +26,10 @@ class ProfileAnalysisModel(Base):
     id: Mapped[str] = mapped_column("analysis_id", Text, primary_key=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     image_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
-    result_payload: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    result_payload: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True),
+        nullable=True,
+    )
     creation_datetime: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

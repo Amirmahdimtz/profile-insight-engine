@@ -137,6 +137,9 @@ class Phase9ArchitectureTests(unittest.TestCase):
         self.assertIn("def downgrade()", migration_text)
         self.assertIn('op.create_table(', migration_text)
         self.assertIn('op.drop_table("profile_analysis")', migration_text)
+        model_text = MODEL.read_text(encoding="utf-8")
+        self.assertIn("JSONB(none_as_null=True)", model_text)
+        self.assertIn("none_as_null=True", migration_text)
 
     def test_api_and_database_config_exist_in_both_environment_files(self):
         for path in CONFIG_FILES:

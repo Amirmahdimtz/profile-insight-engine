@@ -24,6 +24,13 @@ class ProfileAnalysisTransitionConflictError(ProfileAnalysisRepositoryError):
     pass
 
 
+_UNIQUE_VIOLATION_SQLSTATE = "23505"
+
+
+def _is_unique_violation(exc: IntegrityError) -> bool:
+    return getattr(exc.orig, "sqlstate", None) == _UNIQUE_VIOLATION_SQLSTATE
+
+
 @inject
 class ProfileAnalysisRepository(BaseRepository[ProfileAnalysisModel]):
     def __init__(self, db_context: PsqlDbContext):
@@ -43,6 +50,8 @@ class ProfileAnalysisRepository(BaseRepository[ProfileAnalysisModel]):
         try:
             return await self.insert_async(entity)
         except IntegrityError as exc:
+            if not _is_unique_violation(exc):
+                raise
             raise ProfileAnalysisAlreadyExistsError(
                 f"analysis '{analysis_id}' already exists"
             ) from exc

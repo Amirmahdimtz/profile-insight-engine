@@ -2,7 +2,7 @@ import asyncio
 import os
 import unittest
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from src.core.profile_analysis.contracts import ProfileAnalysisStatus
@@ -43,6 +43,13 @@ class ProfileAnalysisRepositoryIntegrationTests(unittest.IsolatedAsyncioTestCase
         self.assertEqual(created.status, ProfileAnalysisStatus.PENDING.value)
         read = await self.repository.get_by_id_async("analysis-1")
         self.assertEqual(read.image_ids, ["img-1", "img-2"])
+        async with self.db.session() as session:
+            is_sql_null = await session.scalar(
+                select(ProfileAnalysisModel.result_payload.is_(None)).where(
+                    ProfileAnalysisModel.id == "analysis-1"
+                )
+            )
+        self.assertTrue(is_sql_null)
 
         await self.repository.transition_async(
             "analysis-1",
