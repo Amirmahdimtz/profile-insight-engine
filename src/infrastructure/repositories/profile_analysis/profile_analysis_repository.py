@@ -93,3 +93,30 @@ class ProfileAnalysisRepository(BaseRepository[ProfileAnalysisModel]):
             except Exception:
                 await session.rollback()
                 raise
+
+    async def fail_unfinished_async(self) -> int:
+        """Mark interrupted pending/in-progress analyses failed during single-process startup."""
+        async with self._db_context.session() as session:
+            try:
+                statement = (
+                    update(ProfileAnalysisModel)
+                    .where(
+                        ProfileAnalysisModel.status.in_(
+                            (
+                                ProfileAnalysisStatus.PENDING.value,
+                                ProfileAnalysisStatus.IN_PROGRESS.value,
+                            )
+                        )
+                    )
+                    .values(
+                        status=ProfileAnalysisStatus.FAILED.value,
+                        result_payload=None,
+                    )
+                )
+                result = await session.execute(statement)
+                await session.commit()
+                return int(result.rowcount or 0)
+            except Exception:
+                await session.rollback()
+                raise
+
