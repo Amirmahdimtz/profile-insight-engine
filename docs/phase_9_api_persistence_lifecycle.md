@@ -124,7 +124,9 @@ python scripts/verify_phase9.py
 if ($LASTEXITCODE -ne 0) { throw "Phase 9 local verification failed" }
 ```
 
-DI bootstrap discovery scans source files deterministically and imports only modules that actually declare an `@inject` provider. This preserves namespace-package discovery without importing every Python module merely to find providers; the fresh-process test remains a functional discovery check rather than a startup-performance benchmark.\n\nThe verifier owns the disposable database lifecycle and stops at the first failing check. It:
+DI bootstrap discovery scans source files deterministically and imports only modules that actually declare an `@inject` provider. This preserves namespace-package discovery without importing every Python module merely to find providers; the fresh-process test remains a functional discovery check rather than a startup-performance benchmark.
+
+The verifier owns the disposable database lifecycle and stops at the first failing check. It:
 
 1. verifies `main` and rejects tracked local modifications;
 2. verifies the Docker daemon is reachable;
