@@ -120,8 +120,31 @@ git status --short
 
 Expected benchmark schema: `phase7-aggregation-benchmark-v1`. Every result row must report `deterministic_rerun = true` and `reversed_input_deterministic = true`. Unit/architecture/documentation tests and the full repository regression must pass. `git status --short` may show the generated untracked benchmark JSON; it must not show unexpected tracked changes.
 
+## Verified local evidence
+
+Target-Windows verification was completed against the Phase 7 implementation commit `40d580b52b9ec98e51423dcf0226353f12e23537`.
+
+- verified source commit before closure: `40d580b52b9ec98e51423dcf0226353f12e23537`
+- compile/import check: passed
+- Phase 7 focused unit/architecture/documentation suite: 29 tests passed in 0.689 seconds
+- full repository regression: 246 tests passed with no failures or errors in 6.415 seconds
+- benchmark schema: `phase7-aggregation-benchmark-v1`
+- benchmark image counts: `1, 5, 20, 50`
+- standard evidence per image: `20`
+- reported complexity: `O(S log S + I)` time and `O(S + I)` auxiliary space
+- 1 image / 22 input signals: p50 `12.878600000476581 ms`, p95 `16.89726000022347 ms`, traced peak `0.03421211242675781 MB`, process peak RAM `20.71484375 MB`, result hash `fd7923208fc1a6786a269e693c326b1fc75e8c6f4918cdf5b9f989f2df104a46`
+- 5 images / 110 input signals: p50 `34.219799999846146 ms`, p95 `40.48322000016924 ms`, traced peak `0.0752725601196289 MB`, process peak RAM `21.1953125 MB`, result hash `0e184ab162e5a5d150bea8af0f262308622ae74ad0afad3ee7d9e891cd896b7c`
+- 20 images / 440 input signals: p50 `139.3674999999348 ms`, p95 `172.83910000005562 ms`, traced peak `0.3124961853027344 MB`, process peak RAM `22.1953125 MB`, result hash `1945ccca52525f1f06042e7bbab902f3c1ab2844217caa0d4efa8907617748ea`
+- 50 images / 1100 input signals: p50 `312.9602999997587 ms`, p95 `383.0551600000035 ms`, traced peak `0.7606830596923828 MB`, process peak RAM `24.05859375 MB`, result hash `2e08a7f7ba6f90a1ef95ff86bd489c76fbb45ac2f8d1949235cc8255d0af73b6`
+- `deterministic_rerun = true` for every benchmark scale
+- `reversed_input_deterministic = true` for every benchmark scale
+- PowerShell reproducibility guard completed without throwing
+- working tree contained only untracked benchmark/evidence JSON artifacts; no tracked production, test, or documentation changes were pending
+
+These results satisfy the Phase 7 determinism, traceability, denominator, duplicate-handling, CPU latency, memory, and reproducibility acceptance requirements. No Phase 8 insight policy or higher-phase behavior is introduced by this closure.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 7 is implemented on `main` only after the implementation commit is created. It remains open until the target-machine commands above are executed and their evidence is returned and accepted. Phase 8 must not begin before that verification closes Phase 7.
+Phase 7 is locally verified on the target Windows environment. Its cross-image aggregation contracts, exact-duplicate semantics, deterministic ordering, coverage/confidence/source-diversity/consistency calculations, concurrency behavior, and scale benchmark evidence are complete for this phase. Phase 8 must not begin until the user explicitly requests the next phase.
