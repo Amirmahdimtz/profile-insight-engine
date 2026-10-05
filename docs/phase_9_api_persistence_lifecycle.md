@@ -162,8 +162,40 @@ The benchmark report is written to `phase9_api_persistence_benchmark.json`. It m
 - full repository regression passes;
 - benchmark reports Phase 9 API/DB latency, graph size and concurrent-read evidence without claiming Phase 10 end-to-end ML performance.
 
+## Verified local evidence
+
+Target-Windows verification was completed against the Phase 9 implementation commit `60bb28e84fc22d43cbb6372ee5d6b7c62c6c5f7a`.
+
+- verified source commit before closure: `60bb28e84fc22d43cbb6372ee5d6b7c62c6c5f7a`
+- Docker availability and disposable PostgreSQL startup/readiness: passed
+- host-side PostgreSQL/Alembic connection preflight: passed
+- compile/import check: passed
+- focused Phase 9 contract/service/controller/repository/architecture/DI/documentation/verifier suite: 33 tests passed in 7.394 seconds
+- Alembic upgrade to `20261005_0001 (head)`: passed
+- Alembic metadata drift check: no new upgrade operations detected
+- PostgreSQL repository integration suite: 4 tests passed in 3.839 seconds
+- persistence constraint regression: completed rows without a result payload were rejected; pending rows persisted Python `None` as SQL `NULL`
+- duplicate error mapping regression: only PostgreSQL unique violation SQLSTATE `23505` maps to `ProfileAnalysisAlreadyExistsError`
+- Alembic downgrade to base and re-upgrade to head: passed
+- discovered API routes: `POST /api/v1/profile_analysis/`, `GET /api/v1/profile_analysis/{analysis_id}`, and `GET /api/v1/profile_analysis/{analysis_id}/result`
+- benchmark schema: `phase9-api-persistence-benchmark-v1`
+- benchmark metric scope: `phase9_contract_and_persistence_not_end_to_end_ml`
+- benchmark iterations: `20`
+- serialized analysis graph size: `1013` bytes
+- API status latency: p50 `8.07145 ms`, p95 `16.8954 ms`
+- API result latency: p50 `8.79555 ms`, p95 `11.0615 ms`
+- database write latency: p50 `31.2172 ms`, p95 `47.7254 ms`
+- database read latency: p50 `23.60065 ms`, p95 `35.542 ms`
+- concurrent PostgreSQL reads: `8` reads completed in `468.0924 ms` wall time with consistent completed state
+- full repository regression: 308 tests passed with no failures or errors in 20.995 seconds
+- tracked repository status was clean after verification; benchmark JSON remained only as an allowed untracked local evidence artifact
+- local `HEAD` matched the verified implementation commit `60bb28e84fc22d43cbb6372ee5d6b7c62c6c5f7a`
+- verifier completed with `PHASE 9 LOCAL VERIFICATION PASSED`
+
+These results satisfy the Phase 9 API contract, lifecycle transitions, persistence atomicity, PostgreSQL constraints, repository rollback/error-mapping behavior, migration reversibility, DI/discovery, traceability/privacy boundary, concurrent-read behavior, benchmark-contract, and full-regression acceptance requirements. The benchmark remains explicitly scoped to Phase 9 contract and persistence behavior and does not claim Phase 10 end-to-end ML performance.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`COMPLETE / READY_FOR_NEXT_PHASE`
 
-Phase 9 implementation is committed only after repository-side checks and diff review. It must not be marked `COMPLETE / READY_FOR_NEXT_PHASE` until the target local verification evidence above is returned and accepted.
+Phase 9 is locally verified on the target Windows environment. Its API surface, lifecycle orchestration, PostgreSQL persistence, result atomicity, migration reversibility, DI discovery, traceability/privacy persistence boundary, benchmark contract, and full repository regression are complete for this phase. Phase 10 must not begin until the user explicitly requests the next phase.
