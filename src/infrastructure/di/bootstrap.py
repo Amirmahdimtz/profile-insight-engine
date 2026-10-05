@@ -1,13 +1,37 @@
 from __future__ import annotations
 
 import importlib
-import pkgutil
 import threading
+from pathlib import Path
+from typing import Iterable
 
 
 _bootstrap_lock = threading.Lock()
 _bootstrapped = False
 _EXCLUDED_SEGMENTS = {"di", "dtos", "models", "scripts", "alembic", "versions", "res", "sso"}
+
+
+def _discover_module_names(
+    package_name: str,
+    package_path: Iterable[str],
+) -> tuple[str, ...]:
+    """Discover Python modules under regular or namespace package roots."""
+
+    module_names: set[str] = set()
+    for root_value in package_path:
+        root = Path(root_value)
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.py"):
+            relative_parts = list(path.relative_to(root).with_suffix("").parts)
+            if any(part in _EXCLUDED_SEGMENTS for part in relative_parts):
+                continue
+            if relative_parts[-1] == "__init__":
+                relative_parts.pop()
+            if not relative_parts:
+                continue
+            module_names.add(".".join((package_name, *relative_parts)))
+    return tuple(sorted(module_names))
 
 
 def _bootstrap_package(package_name: str) -> None:
@@ -22,11 +46,8 @@ def _bootstrap_package(package_name: str) -> None:
     if package_path is None:
         return
 
-    for module_info in pkgutil.walk_packages(package_path, package.__name__ + "."):
-        relative_parts = module_info.name.split(".")[2:]
-        if any(part in _EXCLUDED_SEGMENTS for part in relative_parts):
-            continue
-        importlib.import_module(module_info.name)
+    for module_name in _discover_module_names(package_name, package_path):
+        importlib.import_module(module_name)
 
 
 def bootstrap_di() -> None:

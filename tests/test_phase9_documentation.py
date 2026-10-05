@@ -24,6 +24,10 @@ class Phase9DocumentationTests(unittest.TestCase):
         self.assertIn("python -m evaluation.phase9_api_persistence_benchmark", text)
         self.assertIn("python -m unittest discover", text)
         self.assertIn("git rev-parse HEAD", text)
+        self.assertIn("docker rm -f -v profile-insight-phase9-postgres", text)
+        self.assertIn("NewGuid().ToString(\"N\")", text)
+        self.assertIn("app.openapi()", text)
+        self.assertNotIn("r.methods or []", text)
 
 
 if __name__ == "__main__":

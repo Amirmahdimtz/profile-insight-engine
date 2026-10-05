@@ -116,16 +116,43 @@ python -m pip install -r requirements.txt
 Use an existing disposable PostgreSQL database, or start one with Docker. Do not use a production database for migration downgrade/integration tests.
 
 ```powershell
-$env:PHASE9_DB_PASSWORD = Read-Host "Disposable PostgreSQL password"
+docker rm -f -v profile-insight-phase9-postgres 2>$null | Out-Null
+
+$env:PHASE9_DB_PASSWORD = (
+  [guid]::NewGuid().ToString("N") +
+  [guid]::NewGuid().ToString("N")
+)
+
 docker run --name profile-insight-phase9-postgres `
-  -e POSTGRES_USER=postgres `
-  -e POSTGRES_PASSWORD="$env:PHASE9_DB_PASSWORD" `
-  -e POSTGRES_DB=profile_insight_phase9_test `
+  --env "POSTGRES_USER=postgres" `
+  --env "POSTGRES_PASSWORD=$env:PHASE9_DB_PASSWORD" `
+  --env "POSTGRES_DB=profile_insight_phase9_test" `
   -p 55432:5432 `
   -d postgres:17-alpine
-$EncodedPassword = [System.Uri]::EscapeDataString($env:PHASE9_DB_PASSWORD)
-$env:PROFILE_INSIGHT_DATABASE_URL = "postgresql+asyncpg://postgres:$EncodedPassword@127.0.0.1:55432/profile_insight_phase9_test"
+if ($LASTEXITCODE -ne 0) { throw "PostgreSQL container startup failed" }
+
+$DatabaseReady = $false
+for ($Attempt = 0; $Attempt -lt 30; $Attempt++) {
+  docker exec profile-insight-phase9-postgres pg_isready -U postgres -d profile_insight_phase9_test | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    $DatabaseReady = $true
+    break
+  }
+  Start-Sleep -Seconds 1
+}
+if (-not $DatabaseReady) {
+  docker logs profile-insight-phase9-postgres
+  throw "PostgreSQL did not become ready"
+}
+
+$env:PROFILE_INSIGHT_DATABASE_URL = "postgresql+asyncpg://postgres:$env:PHASE9_DB_PASSWORD@127.0.0.1:55432/profile_insight_phase9_test"
 $env:PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL = $env:PROFILE_INSIGHT_DATABASE_URL
+
+python -m alembic -c src/infrastructure/alembic.ini current
+if ($LASTEXITCODE -ne 0) {
+  docker logs profile-insight-phase9-postgres
+  throw "PostgreSQL authentication preflight failed"
+}
 ```
 
 If PostgreSQL is already available, set the same two environment variables to the disposable database URL instead.
@@ -135,7 +162,7 @@ If PostgreSQL is already available, set the same two environment variables to th
 ```powershell
 python -m compileall -q src evaluation tests
 if ($LASTEXITCODE -ne 0) { throw "compileall failed" }
-python -m unittest tests.test_phase9_contracts tests.test_profile_analysis_service tests.test_profile_analysis_controller tests.test_phase9_architecture tests.test_phase9_documentation -v
+python -m unittest tests.test_phase9_contracts tests.test_profile_analysis_service tests.test_profile_analysis_controller tests.test_phase9_architecture tests.test_phase9_di_discovery tests.test_phase9_documentation -v
 if ($LASTEXITCODE -ne 0) { throw "Phase 9 focused tests failed" }
 ```
 
@@ -155,7 +182,7 @@ if ($LASTEXITCODE -ne 0) { throw "Alembic metadata is not in sync" }
 These tests use the already-migrated Phase 9 table in the database referenced by `PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL` and delete only their test rows before/after the suite. The database must still be disposable because the later migration downgrade is destructive.
 
 ```powershell
-python -m unittest tests.test_profile_analysis_repository_integration tests.test_phase9_di_discovery -v
+python -m unittest tests.test_profile_analysis_repository_integration -v
 if ($LASTEXITCODE -ne 0) { throw "Phase 9 PostgreSQL integration tests failed" }
 ```
 
@@ -174,7 +201,7 @@ python -m alembic -c src/infrastructure/alembic.ini current
 ### 7. DI/discovery and route smoke check
 
 ```powershell
-python -c "from src.infrastructure.di.bootstrap import bootstrap_di; bootstrap_di(); from src.application.web import WebService; from src.infrastructure.di.inject import resolve; app=resolve(WebService).create_app(); print(sorted((','.join(sorted(r.methods or [])), r.path) for r in app.routes if r.path.startswith('/api/')))"
+python -c "from src.infrastructure.di.bootstrap import bootstrap_di; bootstrap_di(); from src.application.web import WebService; from src.infrastructure.di.inject import resolve; app=resolve(WebService).create_app(); spec=app.openapi(); methods={'get','post','put','patch','delete'}; print(sorted((method.upper(), path) for path, operations in spec['paths'].items() for method in operations if method in methods and path.startswith('/api/')))"
 if ($LASTEXITCODE -ne 0) { throw "DI/discovery route smoke check failed" }
 ```
 
@@ -207,6 +234,8 @@ git rev-parse HEAD
 ```
 
 Generated benchmark JSON may appear as an untracked local artifact. No tracked production/test/config/documentation change should remain after verification.
+
+When verification is complete, remove the disposable container and its anonymous volume with `docker rm -f -v profile-insight-phase9-postgres`. Clear the three Phase 9 database environment variables from the shell afterward.
 
 ## Expected result
 
