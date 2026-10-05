@@ -45,7 +45,7 @@ embedding:
   config_version: phase6-embedding-v1-candidate
   device: cpu
   batch_size: 8
-  local_files_only: false
+  local_files_only: true
   theme_similarity_threshold: 0.25
   near_duplicate_similarity_threshold: 0.95
 insights:
