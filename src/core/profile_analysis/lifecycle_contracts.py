@@ -30,6 +30,12 @@ def _require_image_ids(value: object) -> tuple[str, ...]:
     return image_ids
 
 
+def _expected_summary(result: ProfileAnalysisResult) -> str:
+    if not result.insights:
+        return "No supported insights met the configured evidence policy."
+    return "Supported insights: " + " | ".join(item.label for item in result.insights)
+
+
 @dataclass(frozen=True)
 class ProfileAnalysisLifecycle:
     analysis_id: str
@@ -59,7 +65,12 @@ class CompletedProfileAnalysis:
             "insight_policy_version",
             _require_text(self.insight_policy_version, "insight_policy_version"),
         )
-        object.__setattr__(self, "summary", _require_text(self.summary, "summary"))
+        summary = _require_text(self.summary, "summary")
+        if summary != _expected_summary(self.result):
+            raise ProfileAnalysisLifecycleError(
+                "summary must be derived exactly from the completed result insights"
+            )
+        object.__setattr__(self, "summary", summary)
 
     @classmethod
     def from_insight_result(

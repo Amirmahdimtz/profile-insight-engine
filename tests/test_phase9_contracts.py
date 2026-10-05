@@ -108,6 +108,13 @@ class Phase9ContractTests(unittest.TestCase):
         with self.assertRaises(ProfileAnalysisExecutionError):
             ProfileAnalysisService._deserialize_completed(payload)
 
+    def test_persisted_snapshot_rejects_summary_outside_insight_graph(self):
+        completed = self._completed_fixture()
+        payload = ProfileAnalysisService._serialize_completed(completed)
+        payload["summary"] = "This summary adds an unsupported profile claim."
+        with self.assertRaises(ProfileAnalysisExecutionError):
+            ProfileAnalysisService._deserialize_completed(payload)
+
     @staticmethod
     def _completed_fixture() -> CompletedProfileAnalysis:
         evidence = Evidence(

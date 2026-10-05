@@ -67,7 +67,7 @@ One `profile_analysis` row stores lifecycle state and a versioned JSONB complete
 
 The result snapshot schema version is `phase9-analysis-result-v1`. It contains the validated `ProfileAnalysisResult`, Phase 8 insight policy version, and deterministic Phase 8 summary. No separate parallel evidence or insight schema is introduced.
 
-The snapshot preserves `ProfileInsight.evidence_count`, `image_coverage`, `confidence`, `supporting_evidence_ids`, `supporting_image_ids`, and `explanation`. Deserialization reconstructs the Core contracts, which revalidates the support graph and sensitive-inference boundary before a persisted result is returned.
+The snapshot preserves `ProfileInsight.evidence_count`, `image_coverage`, `confidence`, `supporting_evidence_ids`, `supporting_image_ids`, and `explanation`. Deserialization reconstructs the Core contracts, which revalidates the support graph and sensitive-inference boundary before a persisted result is returned. It also requires the persisted summary to equal the deterministic Phase 8 summary derived from the accepted Insight labels, so storage corruption or tampering cannot introduce a new claim through the summary field.
 
 Raw image bytes, canonical image bytes, storage references, and raw provider payloads are not persisted in PostgreSQL.
 
