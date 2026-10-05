@@ -124,6 +124,11 @@ class ProfileAnalysisController:
                 result = await self._profile_analysis_service.get_status_async(analysis_id)
             except ProfileAnalysisNotFoundError as exc:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            except ProfileAnalysisExecutionError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="profile analysis status could not be loaded",
+                ) from exc
             return ProfileAnalysisStatusDto.from_core(result)
 
         @router.get(
