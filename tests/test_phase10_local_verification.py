@@ -17,6 +17,8 @@ class Phase10LocalVerificationTests(unittest.TestCase):
         self.assertIn("PHASE 10 IMPLEMENTATION VERIFICATION PASSED", text)
         self.assertIn('docker", "rm", "-f", CONTAINER_NAME', text)
         self.assertIn("--untracked-files=no", text)
+        self.assertIn("POSTGRES_READINESS_TIMEOUT_SECONDS = 120", text)
+        self.assertIn("time.monotonic() + POSTGRES_READINESS_TIMEOUT_SECONDS", text)
 
     def test_runner_covers_phase10_implementation_checks(self):
         text = RUNNER.read_text(encoding="utf-8")

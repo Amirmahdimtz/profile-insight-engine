@@ -14,6 +14,7 @@ CONTAINER_NAME = f"profile-insight-phase10-verify-{os.getpid()}"
 DATABASE_NAME = "profile_insight_phase10_test"
 DATABASE_USER = "postgres"
 POSTGRES_IMAGE = "postgres:17-alpine"
+POSTGRES_READINESS_TIMEOUT_SECONDS = 120
 HARDWARE_OUTPUT = ROOT / "phase10_hardware_profile.json"
 BENCHMARK_OUTPUT = ROOT / "phase10_final_benchmark.json"
 
@@ -66,7 +67,7 @@ def _docker_logs(env: dict[str, str]) -> None:
 
 def _wait_for_postgres(env: dict[str, str]) -> None:
     print("\n=== PostgreSQL readiness ===", flush=True)
-    deadline = time.monotonic() + 30.0
+    deadline = time.monotonic() + POSTGRES_READINESS_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         completed = subprocess.run(
             ["docker", "exec", CONTAINER_NAME, "pg_isready", "-U", DATABASE_USER, "-d", DATABASE_NAME],
@@ -82,7 +83,9 @@ def _wait_for_postgres(env: dict[str, str]) -> None:
             return
         time.sleep(1.0)
     _docker_logs(env)
-    raise VerificationError("PostgreSQL did not become ready within 30 seconds")
+    raise VerificationError(
+        f"PostgreSQL did not become ready within {POSTGRES_READINESS_TIMEOUT_SECONDS} seconds"
+    )
 
 
 def _verify_repository_state(env: dict[str, str]) -> None:
