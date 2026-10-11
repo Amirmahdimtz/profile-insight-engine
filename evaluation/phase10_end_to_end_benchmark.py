@@ -388,11 +388,13 @@ def main() -> None:
     if args.iterations <= 0 or args.concurrency <= 0:
         parser.error("iterations and concurrency must be positive")
     report = asyncio.run(run_async(args))
-    args.output.write_text(
-        json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
-    print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False))
+    rendered = json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+    args.output.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
+    measured = [item for item in report["workloads"] if item.get("status") == "measured"]
+    successful_iterations = sum(int(item.get("successful_iterations", 0)) for item in measured)
+    if measured and successful_iterations == 0:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

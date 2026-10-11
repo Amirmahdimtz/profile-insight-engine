@@ -1,6 +1,8 @@
 import argparse
 import json
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -39,6 +41,12 @@ class Phase10BenchmarkTests(unittest.TestCase):
         self.assertEqual(_DEFAULT_WORKLOAD_SIZES, (1, 5, 20, 50, 100))
         self.assertEqual(E2E_SCHEMA_VERSION, "phase10-end-to-end-benchmark-v1")
         self.assertIn("without_semantic_theme_injection", E2E_METRIC_SCOPE)
+
+    def test_e2e_cli_writes_report_then_fails_when_no_measured_iteration_succeeds(self):
+        source = pathlib.Path("evaluation/phase10_end_to_end_benchmark.py").read_text(encoding="utf-8")
+        self.assertIn("successful_iterations == 0", source)
+        self.assertIn("raise SystemExit(1)", source)
+        self.assertLess(source.index("args.output.write_text"), source.index("raise SystemExit(1)"))
 
     def test_final_matrix_covers_required_failure_scenarios(self):
         args = argparse.Namespace(
