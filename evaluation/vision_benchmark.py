@@ -387,6 +387,55 @@ def _wait_for_health(
     )
 
 
+def _wait_for_runtime_idle(
+    base_url: str,
+    timeout_seconds: int,
+) -> float:
+    started = time.perf_counter()
+    deadline = started + timeout_seconds
+    while time.perf_counter() < deadline:
+        request = urllib.request.Request(
+            f"{base_url}/slots",
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=2,
+            ) as response:
+                payload = json.loads(
+                    response.read().decode("utf-8")
+                )
+                if (
+                    response.status == 200
+                    and isinstance(payload, Sequence)
+                    and not isinstance(
+                        payload,
+                        (str, bytes, bytearray),
+                    )
+                    and len(payload) > 0
+                    and all(
+                        isinstance(slot, Mapping)
+                        and slot.get("is_processing") is False
+                        for slot in payload
+                    )
+                ):
+                    return (
+                        time.perf_counter() - started
+                    ) * 1000.0
+        except (
+            OSError,
+            TimeoutError,
+            json.JSONDecodeError,
+            UnicodeError,
+        ):
+            pass
+        time.sleep(0.25)
+    raise RuntimeError(
+        "llama.cpp runtime did not become idle after failed request"
+    )
+
+
 def _runtime_props(
     base_url: str,
     timeout_seconds: int,
@@ -1398,6 +1447,11 @@ async def run_vision_benchmark_async(
                         reason = _sanitized_failure_reason(exc)
                         failure_reasons[reason] = (
                             failure_reasons.get(reason, 0) + 1
+                        )
+                        await asyncio.to_thread(
+                            _wait_for_runtime_idle,
+                            base_url,
+                            startup_timeout_seconds,
                         )
                         continue
 

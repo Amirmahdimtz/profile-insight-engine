@@ -153,7 +153,7 @@ python -m evaluation.phase10_end_to_end_benchmark `
   --output phase10_end_to_end_benchmark.json
 ```
 
-Slow/time-out behavior from the current Vision candidate is valid evidence and must be returned rather than hidden.
+Slow/time-out behavior from the current Vision candidate is valid evidence and must be returned rather than hidden. The Vision benchmark also waits for llama.cpp slots to become idle after a failed/timed-out request before advancing to the next sample, so cancellation cleanup and queue time cannot contaminate later sample measurements.
 
 ### Final evidence report
 

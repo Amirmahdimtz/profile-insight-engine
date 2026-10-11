@@ -18,6 +18,7 @@ from evaluation.vision_benchmark import (
     _sample_iteration_count,
     _sanitized_failure_reason,
     _wait_for_health,
+    _wait_for_runtime_idle,
     audit_visual_label_coverage,
     run_vision_benchmark_async,
 )
@@ -193,6 +194,48 @@ class VisionBenchmarkTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreaterEqual(elapsed_ms, 0.0)
         self.assertEqual(process.poll.call_count, 2)
+
+    def test_runtime_idle_poll_waits_for_busy_slot_to_release(self):
+        busy_response = mock.MagicMock()
+        busy_response.__enter__.return_value = busy_response
+        busy_response.status = 200
+        busy_response.read.return_value = b'[{"is_processing":true}]'
+
+        idle_response = mock.MagicMock()
+        idle_response.__enter__.return_value = idle_response
+        idle_response.status = 200
+        idle_response.read.return_value = b'[{"is_processing":false}]'
+
+        with (
+            mock.patch(
+                "evaluation.vision_benchmark.urllib.request.urlopen",
+                side_effect=(busy_response, idle_response),
+            ),
+            mock.patch(
+                "evaluation.vision_benchmark.time.sleep",
+            ),
+        ):
+            elapsed_ms = _wait_for_runtime_idle(
+                "http://127.0.0.1:1234",
+                1,
+            )
+
+        self.assertGreaterEqual(elapsed_ms, 0.0)
+
+    def test_failed_sample_waits_for_runtime_idle_before_continuing(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "evaluation"
+            / "vision_benchmark.py"
+        ).read_text(encoding="utf-8")
+        failure_index = source.index("failure_reasons[reason]")
+        idle_index = source.index(
+            "_wait_for_runtime_idle",
+            failure_index,
+        )
+        continue_index = source.index("continue", idle_index)
+        self.assertLess(failure_index, idle_index)
+        self.assertLess(idle_index, continue_index)
 
     def test_inference_preflight_rejection_fields_are_traceable(self):
         source = (
