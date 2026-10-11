@@ -37,6 +37,14 @@ class Phase10LocalVerificationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
+    def test_runner_migrates_disposable_database_before_db_dependent_tests(self):
+        text = RUNNER.read_text(encoding="utf-8")
+        alembic_upgrade = text.index('"Alembic upgrade"')
+        focused_tests = text.index('"Focused Phase 10 tests"')
+        recovery_regression = text.index('"PostgreSQL recovery regression"')
+        self.assertLess(alembic_upgrade, focused_tests)
+        self.assertLess(alembic_upgrade, recovery_regression)
+
     def test_hardware_collector_does_not_read_secrets(self):
         text = HARDWARE.read_text(encoding="utf-8")
         ast.parse(text)

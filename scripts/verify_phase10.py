@@ -146,6 +146,16 @@ def main() -> int:
             env=env,
         )
         _run(
+            "Alembic upgrade",
+            [sys.executable, "-m", "alembic", "-c", "src/infrastructure/alembic.ini", "upgrade", "head"],
+            env=env,
+        )
+        _run(
+            "Alembic metadata check",
+            [sys.executable, "-m", "alembic", "-c", "src/infrastructure/alembic.ini", "check"],
+            env=env,
+        )
+        _run(
             "Focused Phase 10 tests",
             [
                 sys.executable, "-m", "unittest",
@@ -157,16 +167,6 @@ def main() -> int:
                 "tests.test_phase9_di_discovery",
                 "-v",
             ],
-            env=env,
-        )
-        _run(
-            "Alembic upgrade",
-            [sys.executable, "-m", "alembic", "-c", "src/infrastructure/alembic.ini", "upgrade", "head"],
-            env=env,
-        )
-        _run(
-            "Alembic metadata check",
-            [sys.executable, "-m", "alembic", "-c", "src/infrastructure/alembic.ini", "check"],
             env=env,
         )
         _run(
