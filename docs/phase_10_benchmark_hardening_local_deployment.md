@@ -50,9 +50,11 @@ The final target-host Transformers candidate benchmark has now been returned and
 - overall Precision/Recall/F1 and each evaluated visual label type were `0.0`;
 - unsupported-claim rate before policy and after validation was `0.0`.
 
-This is valid benchmark evidence, not an acceptable production selection. In this benchmark family, `benchmark_valid=true` means the benchmark completed with enough measurable output to produce metrics; it does **not** mean the candidate is production-ready. The reviewed SmolVLM2-256M Transformers candidate is therefore rejected for the current target hardware/configuration. Phase 10 will not continue model hopping or post-hoc threshold/prompt tuning without an explicit product or hardware decision.
+This is valid benchmark evidence, not an acceptable production selection. In this benchmark family, `benchmark_valid=true` means the benchmark completed with enough measurable output to produce metrics; it does **not** mean the candidate is production-ready. The reviewed SmolVLM2-256M Transformers candidate is therefore rejected for the current target hardware/configuration.
 
-Embedding Phase 6 measured strong retrieval for `google/siglip2-base-patch16-224` (Recall@5 about `0.9907`, mAP about `0.9183`) but theme Macro F1 at threshold `0.25` was `0.0`. Model/threshold selection therefore remains unresolved.
+The project-finalization path does not introduce another generative VLM. It reuses the already benchmarked local `google/siglip2-base-patch16-224` vision-language encoder as a zero-shot visual classifier. The candidate receives only the global scene/object/activity/topic class universe from the versioned Phase 2 manifest; it never receives the per-image ground-truth assignment. It emits no synthetic caption, uses independent SigLIP sigmoid scores as explicitly uncalibrated confidence, and remains benchmark-only until target-host evidence is reviewed.
+
+Embedding Phase 6 measured strong retrieval for `google/siglip2-base-patch16-224` (Recall@5 about `0.9907`, mAP about `0.9183`) but theme Macro F1 at threshold `0.25` was `0.0`. Those retrieval results justify evaluating the same already-local model as a zero-shot Vision classifier; they do not pre-approve its Vision quality or threshold.
 
 Phase 8 has deterministic contract evidence and structural summary factuality, but no authorized insight-level correctness labels. Product insight precision and confidence calibration remain `unavailable`.
 
@@ -182,6 +184,37 @@ if ($LASTEXITCODE -ne 0) { throw "Transformers Vision benchmark failed" }
 
 The report records the resolved Hugging Face snapshot, provider/runtime versions, per-type precision/recall/F1, unsupported-claim rates, p50/p95 latency, failure rate and deterministic reruns. Raw generated model text and raw image bytes are not written to the benchmark report.
 
+### SigLIP2 zero-shot Vision finalization benchmark
+
+This is the final local/offline Vision candidate under the current CPU-only constraint. It uses the existing `google/siglip2-base-patch16-224` model through Transformers zero-shot image classification semantics. The versioned manifest supplies the global visual class universe only; sample-specific ground-truth mappings are never passed to the provider.
+
+The repository candidate configuration is CPU-only, `local_files_only=true`, `minimum_score=0.10`, at most one observation per visual kind, and the standard zero-shot hypothesis template `This is a photo of {}.`. The threshold is a candidate setting recorded in the report, not a production-final value.
+
+If the SigLIP2 checkpoint is not yet cached, acquire it once while network access is available:
+
+```powershell
+python -c "from transformers import AutoModel, AutoProcessor; m='google/siglip2-base-patch16-224'; AutoProcessor.from_pretrained(m, revision='main'); AutoModel.from_pretrained(m, revision='main'); print('SigLIP2 zero-shot cache ready')"
+```
+
+Then disconnect/network-disable if required and run the real target-host benchmark:
+
+```powershell
+$DatasetRoot = "E:\phase2-real-dataset"
+
+python -m evaluation.siglip_zero_shot_vision_benchmark `
+  --manifest "$DatasetRoot\manifest.json" `
+  --dataset-root "$DatasetRoot" `
+  --iterations 2 `
+  --determinism-sample-count 3 `
+  --expected-manifest-fingerprint "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc" `
+  --expected-dataset-content-fingerprint "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e" `
+  --output .\phase10_siglip_zero_shot_vision_benchmark.json
+
+if ($LASTEXITCODE -ne 0) { throw "SigLIP2 zero-shot Vision benchmark failed" }
+```
+
+The candidate benchmark fails closed if any evaluation image has a runtime failure. A zero exit code means the complete benchmark produced reliable metrics; it does not automatically promote the candidate. The report includes the resolved model snapshot, taxonomy and taxonomy fingerprint, configured threshold, Precision/Recall/F1, unsupported-claim rates, score diagnostics, p50/p95 latency, failure rate and deterministic reruns. Raw image bytes are never written to the report.
+
 ### End-to-end benchmark
 
 Set `DATASET_ROOT` to the authorized Phase 2 dataset directory, then run:
@@ -206,7 +239,7 @@ After the prior phase benchmark JSON files are available locally:
 ```powershell
 python -m evaluation.phase10_benchmark `
   --ocr-report .\phase4_ocr_benchmark.json `
-  --vision-report .\phase10_transformers_vision_benchmark.json `
+  --vision-report .\phase10_siglip_zero_shot_vision_benchmark.json `
   --embedding-report .\phase6_embedding_benchmark.json `
   --insight-report .\phase8_insight_benchmark.json `
   --api-persistence-report .\phase9_api_persistence_benchmark.json `
@@ -250,15 +283,15 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 `UNRESOLVED`
 
-The target-host Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No acceptable local Vision model/provider configuration is currently demonstrated on the target CPU-only workstation.
+The target-host generative Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No generative local Vision model/provider configuration is acceptable on the current CPU-only workstation.
 
-The Transformers adapter remains benchmark-only and deliberately unbound from DI; the active appsettings provider is not changed to a rejected candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
+The finalization candidate is now the non-generative SigLIP2 zero-shot adapter described above. It deliberately remains unbound from DI until its full 18-sample target-host report is returned and reviewed. The active appsettings provider is not changed to any rejected or unverified candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
 
-Completing Phase 10 now requires an explicit change in one of the unresolved constraints before another Vision candidate is justified: more capable target hardware, a non-local/non-offline Vision runtime, or a revised product requirement for Vision quality/reliability. The repository must not silently weaken the product contract or continue model hopping to manufacture a passing result.
+If the SigLIP2 zero-shot benchmark demonstrates complete runtime reliability plus materially better evidence quality than the rejected candidates, its exact resolved snapshot/taxonomy/config can be frozen in the evidence-review commit and then used for final E2E acceptance. If it also fails, Phase 10 cannot be honestly closed without changing hardware, local/offline requirements, or the Vision product contract.
 
 ## Acceptance evidence still required
 
-The target hardware profile, current Vision benchmark and full regression evidence are now available. Remaining acceptance work still includes the unresolved production Vision selection plus the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart evidence for the finally selected topology, and full regression after any final selected config change. Metrics requiring unavailable insight-level labels must remain `unavailable`; they cannot be fabricated to close the phase.
+The target hardware profile, rejected generative Vision benchmark and full regression evidence are available. Remaining acceptance work is intentionally narrow: run/review the SigLIP2 zero-shot Vision benchmark, freeze the selected Vision snapshot/taxonomy/config only if supported by that evidence, then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable insight-level labels remain `unavailable`; they cannot be fabricated to close the phase.
 
 ## Status
 

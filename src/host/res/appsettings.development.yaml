@@ -38,6 +38,16 @@ vision:
   top_p: 1.0
   seed: 0
   confidence_semantics: model_self_reported_uncalibrated
+  siglip_zero_shot_candidate:
+    model_id: google/siglip2-base-patch16-224
+    model_revision: main
+    config_version: phase10-siglip2-zero-shot-v1
+    device: cpu
+    local_files_only: true
+    minimum_score: 0.10
+    max_observations_per_kind: 1
+    confidence_semantics: siglip_independent_sigmoid_score_uncalibrated
+    hypothesis_template: "This is a photo of {}."
 embedding:
   provider: transformers
   model_id: google/siglip2-base-patch16-224
