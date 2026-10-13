@@ -14,6 +14,15 @@ from evaluation.transformers_vision_benchmark import (
 
 
 class TransformersVisionBenchmarkContractTests(unittest.TestCase):
+    def test_benchmark_module_is_parseable(self):
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "evaluation"
+            / "transformers_vision_benchmark.py"
+        )
+        source = path.read_text(encoding="utf-8")
+        compile(source, str(path), "exec")
+
     def test_report_metadata_uses_real_manifest_dataset_version_contract(self):
         manifest = load_manifest(
             Path(__file__).resolve().parents[1]

@@ -154,6 +154,20 @@ async def run_transformers_vision_benchmark_async(
     )
 
     for sample in eval_samples:
+        for label in sample.ground_truth.labels:
+            if label.type in _VISUAL_LABEL_TYPES:
+                expected_value = (
+                    label.value.strip()
+                    if isinstance(label.value, str) and label.value.strip()
+                    else label.label
+                )
+                expected_by_type[label.type.value].add(
+                    (
+                        sample.sample_id,
+                        _benchmark_label(expected_value),
+                    )
+                )
+
     attempted_samples = 0
     successful_samples = 0
     preflight_failed = False
@@ -172,20 +186,6 @@ async def run_transformers_vision_benchmark_async(
             ),
             image_ids=(sample.image.image_id,),
         )
-
-        for label in sample.ground_truth.labels:
-            if label.type in _VISUAL_LABEL_TYPES:
-                expected_value = (
-                    label.value.strip()
-                    if isinstance(label.value, str) and label.value.strip()
-                    else label.label
-                )
-                expected_by_type[label.type.value].add(
-                    (
-                        sample.sample_id,
-                        _benchmark_label(expected_value),
-                    )
-                )
 
         attempted_samples += 1
         batch = await image_service.process_async(request, (raw,))
