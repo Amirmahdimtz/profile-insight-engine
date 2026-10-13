@@ -37,7 +37,20 @@ OCR Phase 4 did not establish a universal winner: `tessdata_best` was slightly b
 
 Vision Phase 5 is negative selection evidence for the current candidates. Gemma 3 4B failed the offline-load preflight. Qwen2.5-VL 3B completed a reduced evaluation but had 13/18 request timeouts, overall F1 `0.0`, p50 around `276993 ms`, and p95 around `298460 ms`. The current Vision candidate has previously shown very high latency/timeouts and is not production-final.
 
-Phase 10 target-host diagnostics additionally rejected the llama.cpp path on the CPU-only workstation: Qwen2-VL 2B, SmolVLM2 2.2B and SmolVLM2 256M all exceeded the 120-second request budget on a clean single-image probe. Direct Transformers inference with `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` identified image splitting as the dominant bottleneck: the default processor produced 17 image tiles and a first-token latency around 102 seconds, while disabling image splitting and using one 512px tile reduced first-token latency to about 13.8 seconds and completed a 32-token generation in about 14.3 seconds. Prompt-only JSON remained fail-closed because a 256-token response ended with an unclosed JSON object. `lm-format-enforcer==0.11.3` was rejected because its Transformers integration is incompatible with the repository's pinned `transformers==5.18.0`. These measurements are diagnostic evidence only; the constrained Transformers candidate still requires the repository benchmark below before production selection.
+Phase 10 target-host diagnostics additionally rejected the llama.cpp path on the CPU-only workstation: Qwen2-VL 2B, SmolVLM2 2.2B and SmolVLM2 256M all exceeded the 120-second request budget on a clean single-image probe. Direct Transformers inference with `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` identified image splitting as the dominant bottleneck: the default processor produced 17 image tiles and a first-token latency around 102 seconds, while disabling image splitting and using one 512px tile reduced first-token latency to about 13.8 seconds and completed a 32-token generation in about 14.3 seconds. Prompt-only JSON remained fail-closed because a 256-token response ended with an unclosed JSON object. `lm-format-enforcer==0.11.3` was rejected because its Transformers integration is incompatible with the repository's pinned `transformers==5.18.0`.
+
+The final target-host Transformers candidate benchmark has now been returned and reviewed. For model snapshot `067788b187b95ebe7b2e040b3e4299e342e5b8fd` with Transformers `5.18.0`, Outlines `1.3.3`, CPU execution, one 512px image tile and `max_tokens=256`:
+
+- 18 samples were attempted and only 9 completed successfully;
+- failure rate was `0.5`;
+- 5 failures were malformed structured output;
+- 4 failures were structured output truncated at the token limit;
+- measured p50 latency was about `45531 ms` and p95 about `56951 ms` on successful samples;
+- deterministic reruns were stable on the configured 3-sample subset;
+- overall Precision/Recall/F1 and each evaluated visual label type were `0.0`;
+- unsupported-claim rate before policy and after validation was `0.0`.
+
+This is valid benchmark evidence, not an acceptable production selection. In this benchmark family, `benchmark_valid=true` means the benchmark completed with enough measurable output to produce metrics; it does **not** mean the candidate is production-ready. The reviewed SmolVLM2-256M Transformers candidate is therefore rejected for the current target hardware/configuration. Phase 10 will not continue model hopping or post-hoc threshold/prompt tuning without an explicit product or hardware decision.
 
 Embedding Phase 6 measured strong retrieval for `google/siglip2-base-patch16-224` (Recall@5 about `0.9907`, mAP about `0.9183`) but theme Macro F1 at threshold `0.25` was `0.0`. Model/threshold selection therefore remains unresolved.
 
@@ -237,11 +250,15 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 `UNRESOLVED`
 
-No OCR traineddata choice, Vision model/config, Embedding model/config, semantic threshold or Insight threshold is production-final in this implementation commit. The new Transformers Vision adapter remains benchmark-only and deliberately unbound from DI until its target-host report is reviewed; the active appsettings provider remains unchanged.
+The target-host Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No acceptable local Vision model/provider configuration is currently demonstrated on the target CPU-only workstation.
+
+The Transformers adapter remains benchmark-only and deliberately unbound from DI; the active appsettings provider is not changed to a rejected candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
+
+Completing Phase 10 now requires an explicit change in one of the unresolved constraints before another Vision candidate is justified: more capable target hardware, a non-local/non-offline Vision runtime, or a revised product requirement for Vision quality/reliability. The repository must not silently weaken the product contract or continue model hopping to manufacture a passing result.
 
 ## Acceptance evidence still required
 
-Target hardware/runtime profile, current OCR/Vision/Embedding comparison reports, target-host E2E workload/resource/failure evidence, offline startup/restart evidence, and full regression after any final selected config change are still required. Metrics requiring unavailable insight-level labels must remain `unavailable`; they cannot be fabricated to close the phase.
+The target hardware profile, current Vision benchmark and full regression evidence are now available. Remaining acceptance work still includes the unresolved production Vision selection plus the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart evidence for the finally selected topology, and full regression after any final selected config change. Metrics requiring unavailable insight-level labels must remain `unavailable`; they cannot be fabricated to close the phase.
 
 ## Status
 

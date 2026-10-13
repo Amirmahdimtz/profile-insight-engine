@@ -38,6 +38,12 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("single 512px image tile", text)
         self.assertIn("Outlines JSON-schema constrained decoding", text)
         self.assertIn("benchmark-only and deliberately unbound from DI", text)
+        self.assertIn("benchmark_valid=true", text)
+        self.assertIn("does **not** mean the candidate is production-ready", text)
+        self.assertIn("failure rate was `0.5`", text)
+        self.assertIn("model snapshot `067788b187b95ebe7b2e040b3e4299e342e5b8fd`", text)
+        self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
+        self.assertIn("No acceptable local Vision model/provider configuration", text)
 
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):
         text = DOC.read_text(encoding="utf-8")
