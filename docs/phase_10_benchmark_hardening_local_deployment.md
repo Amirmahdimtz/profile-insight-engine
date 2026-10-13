@@ -193,7 +193,7 @@ The repository candidate configuration is CPU-only, `local_files_only=true`, `mi
 If the SigLIP2 checkpoint is not yet cached, acquire it once while network access is available:
 
 ```powershell
-python -c "from transformers import AutoModelForZeroShotImageClassification, AutoProcessor; m='google/siglip2-base-patch16-224'; AutoProcessor.from_pretrained(m, revision='main'); AutoModelForZeroShotImageClassification.from_pretrained(m, revision='main'); print('SigLIP2 zero-shot cache ready')"
+python -c "from transformers import AutoModel, AutoProcessor; m='google/siglip2-base-patch16-224'; AutoProcessor.from_pretrained(m, revision='main'); AutoModel.from_pretrained(m, revision='main'); print('SigLIP2 zero-shot cache ready')"
 ```
 
 Then disconnect/network-disable if required and run the real target-host benchmark:
