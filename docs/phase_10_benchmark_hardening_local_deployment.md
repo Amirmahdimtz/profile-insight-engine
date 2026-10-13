@@ -147,7 +147,7 @@ The Phase 10 candidate uses `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` through
 If the model is not already cached, acquire it once while network access is available:
 
 ```powershell
-python -c "from huggingface_hub import snapshot_download; print(snapshot_download(repo_id='HuggingFaceTB/SmolVLM2-256M-Video-Instruct', revision='main'))"
+python -c "import torch; from transformers import AutoProcessor, AutoModelForMultimodalLM; m='HuggingFaceTB/SmolVLM2-256M-Video-Instruct'; AutoProcessor.from_pretrained(m, revision='main'); AutoModelForMultimodalLM.from_pretrained(m, revision='main', dtype=torch.float32); print('Transformers Vision candidate cache ready')"
 ```
 
 Then run the real 18-sample evaluation offline from repository root:
