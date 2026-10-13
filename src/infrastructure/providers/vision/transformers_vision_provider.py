@@ -528,7 +528,8 @@ class TransformersVisionProvider(IVisionProvider):
                 raise
             except Exception as exc:
                 raise VisionProviderError(
-                    "transformers vision constrained generation failed"
+                    "transformers vision constrained generation failed "
+                    f"({type(exc).__name__})"
                 ) from exc
             generated_ids = output_ids[0][input_token_count:]
             generated_count = int(generated_ids.shape[-1])
