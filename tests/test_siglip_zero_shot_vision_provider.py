@@ -134,15 +134,13 @@ class SiglipZeroShotVisionProviderTests(unittest.TestCase):
                 0.60,
             ),
         )
+        by_identity = {
+            (item.kind, item.label): item
+            for item in scores
+        }
         ordered = tuple(
-            sorted(
-                scores,
-                key=lambda item: (
-                    item.kind.value,
-                    item.label.casefold(),
-                    item.label,
-                ),
-            )
+            by_identity[identity]
+            for identity in provider._entries
         )
         result = provider.result_from_scores(
             "img-1",
