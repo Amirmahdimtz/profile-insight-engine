@@ -24,6 +24,7 @@ class Phase10DocumentationTests(unittest.TestCase):
             "python scripts/verify_phase10.py",
             "python scripts/collect_phase10_hardware.py",
             "python -m evaluation.transformers_vision_benchmark",
+            "python -m evaluation.siglip_zero_shot_vision_benchmark",
             "python -m evaluation.phase10_end_to_end_benchmark",
             "python -m evaluation.phase10_benchmark",
             "python -m alembic -c src/infrastructure/alembic.ini upgrade head",
@@ -43,14 +44,18 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("failure rate was `0.5`", text)
         self.assertIn("model snapshot `067788b187b95ebe7b2e040b3e4299e342e5b8fd`", text)
         self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
-        self.assertIn("No acceptable local Vision model/provider configuration", text)
+        self.assertIn("No generative local Vision model/provider configuration is acceptable", text)
+        self.assertIn("finalization candidate is now the non-generative SigLIP2 zero-shot adapter", text)
+        self.assertIn("global visual class universe", text)
+        self.assertIn("sample-specific ground-truth mappings are never passed to the provider", text)
+        self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
 
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("`unavailable`", text)
         self.assertIn("No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet", text)
         self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
-        self.assertIn("No acceptable local Vision model/provider configuration", text)
+        self.assertIn("No generative local Vision model/provider configuration is acceptable", text)
         self.assertNotIn("Qwen2.5-VL-3B is the production model", text)
         self.assertNotIn("SigLIP2 is the production model", text)
 
