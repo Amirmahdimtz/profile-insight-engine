@@ -27,6 +27,8 @@ class Phase10LocalVerificationTests(unittest.TestCase):
             "tests.test_phase10_hardening",
             "tests.test_phase10_benchmark",
             "tests.test_phase10_documentation",
+            "tests.test_transformers_vision_provider",
+            "tests.test_transformers_vision_benchmark",
             "alembic",
             "collect_phase10_hardware.py",
             "evaluation.phase10_benchmark",
