@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from evaluation.transformers_vision_benchmark import (
     _manifest_identity,
     _report_exit_code,
     _sample_iteration_count,
+    run_transformers_vision_benchmark_async,
 )
 
 
@@ -49,6 +51,14 @@ class TransformersVisionBenchmarkContractTests(unittest.TestCase):
             ),
             1,
         )
+
+    def test_runtime_benchmark_fails_fast_when_first_sample_inference_fails(self):
+        source = inspect.getsource(
+            run_transformers_vision_benchmark_async
+        )
+        self.assertIn("if sample_index == 0:", source)
+        self.assertIn("preflight_failed = True", source)
+        self.assertIn('"rejected_preflight"', source)
 
     def test_cli_fails_closed_without_valid_candidate(self):
         self.assertEqual(

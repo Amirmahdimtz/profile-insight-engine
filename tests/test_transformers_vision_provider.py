@@ -8,8 +8,40 @@ from src.core.profile_analysis.vision_contracts import VisionProviderError
 from src.infrastructure.providers.vision.transformers_vision_provider import (
     TransformersVisionProvider,
     TransformersVisionSettings,
+    _build_prefix_allowed_tokens_fn,
 )
 from src.infrastructure.utils.config_reader import ConfigReader
+
+
+
+
+
+class _FakeTokenIds:
+    def __init__(self, values):
+        self._values = values
+
+    def tolist(self):
+        return list(self._values)
+
+
+class _FakeGuide:
+    instances = []
+
+    def __init__(self, index):
+        self.index = index
+        self.advanced = []
+        type(self).instances.append(self)
+
+    def advance(self, *, token_id, return_tokens):
+        self.advanced.append((token_id, return_tokens))
+
+    def get_tokens(self):
+        return [1, 4, 9]
+
+
+class _OutOfRangeGuide(_FakeGuide):
+    def get_tokens(self):
+        return [9]
 
 
 def _settings() -> TransformersVisionSettings:
@@ -51,6 +83,49 @@ def _image(path: Path) -> CanonicalImage:
 class TransformersVisionProviderTests(
     unittest.IsolatedAsyncioTestCase
 ):
+    def test_prefix_constraint_replays_generated_tokens_and_filters_vocab(self):
+        _FakeGuide.instances.clear()
+        callback = _build_prefix_allowed_tokens_fn(
+            guide_type=_FakeGuide,
+            index=object(),
+            prompt_token_count=2,
+            output_vocab_size=5,
+        )
+        allowed = callback(
+            0,
+            _FakeTokenIds([100, 101, 3]),
+        )
+        self.assertEqual(allowed, [1, 4])
+        self.assertEqual(
+            _FakeGuide.instances[-1].advanced,
+            [(3, False)],
+        )
+
+    def test_prefix_constraint_fails_closed_when_no_model_token_is_valid(self):
+        callback = _build_prefix_allowed_tokens_fn(
+            guide_type=_OutOfRangeGuide,
+            index=object(),
+            prompt_token_count=2,
+            output_vocab_size=5,
+        )
+        with self.assertRaisesRegex(
+            VisionProviderError,
+            "no valid model tokens",
+        ):
+            callback(
+                0,
+                _FakeTokenIds([100, 101]),
+            )
+
+    def test_generation_uses_prefix_constraint_instead_of_direct_logits_masking(self):
+        import inspect
+
+        source = inspect.getsource(
+            TransformersVisionProvider._generate_structured_sync
+        )
+        self.assertIn("prefix_allowed_tokens_fn=", source)
+        self.assertNotIn("logits_processor=", source)
+
     def test_candidate_is_not_di_bound_before_evidence_selection(self):
         self.assertFalse(
             getattr(

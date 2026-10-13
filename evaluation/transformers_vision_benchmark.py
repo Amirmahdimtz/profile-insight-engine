@@ -153,6 +153,11 @@ async def run_transformers_vision_benchmark_async(
         else 0
     )
 
+    for sample in eval_samples:
+    attempted_samples = 0
+    successful_samples = 0
+    preflight_failed = False
+
     for sample_index, sample in enumerate(eval_samples):
         source_path = dataset_root / sample.image.relative_path
         raw = RawImageInput(
@@ -182,6 +187,7 @@ async def run_transformers_vision_benchmark_async(
                     )
                 )
 
+        attempted_samples += 1
         batch = await image_service.process_async(request, (raw,))
         try:
             signatures: list[
@@ -237,8 +243,12 @@ async def run_transformers_vision_benchmark_async(
                 failure_reasons[reason] = (
                     failure_reasons.get(reason, 0) + 1
                 )
+                if sample_index == 0:
+                    preflight_failed = True
+                    break
                 continue
 
+            successful_samples += 1
             if first_result is not None:
                 for evidence in first_result.evidence:
                     if evidence.type.value in predicted_by_type:
@@ -269,6 +279,17 @@ async def run_transformers_vision_benchmark_async(
     for label_type in _VISUAL_LABEL_TYPES:
         expected = expected_by_type[label_type.value]
         predicted = predicted_by_type[label_type.value]
+        if preflight_failed:
+            per_label_type[label_type.value] = {
+                "evaluated": False,
+                "reason": "candidate rejected during inference preflight",
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "expected_count": len(expected),
+                "predicted_count": 0,
+            }
+            continue
         if not expected:
             per_label_type[label_type.value] = {
                 "evaluated": False,
@@ -303,14 +324,17 @@ async def run_transformers_vision_benchmark_async(
             aggregate_expected,
             aggregate_predicted,
         )
-        if aggregate_expected
+        if aggregate_expected and not preflight_failed
         else None
     )
-    successful_samples = len(eval_samples) - failed_samples
 
     candidate_report = {
         "candidate": "smolvlm2_256m_transformers_single_tile",
-        "candidate_status": "evaluated",
+        "candidate_status": (
+            "rejected_preflight"
+            if preflight_failed
+            else "evaluated"
+        ),
         "provider": "transformers",
         "provider_version": provider_version,
         "model_id": settings.model_id,
@@ -328,9 +352,17 @@ async def run_transformers_vision_benchmark_async(
         "max_caption_chars": settings.max_caption_chars,
         "sample_count": len(eval_samples),
         "evaluated_sample_count": successful_samples,
+        "attempted_sample_count": attempted_samples,
         "failed_sample_count": failed_samples,
-        "failure_rate": failed_samples / len(eval_samples),
-        "benchmark_valid": successful_samples > 0,
+        "failure_rate": (
+            failed_samples / attempted_samples
+            if attempted_samples
+            else None
+        ),
+        "benchmark_valid": (
+            successful_samples > 0
+            and not preflight_failed
+        ),
         "failure_reasons": dict(sorted(failure_reasons.items())),
         "evaluated_label_types": evaluated_label_types,
         "precision": None if overall is None else overall.precision,
@@ -353,11 +385,17 @@ async def run_transformers_vision_benchmark_async(
             else None
         ),
         "determinism_sample_count": (
-            effective_determinism_sample_count
+            0
+            if preflight_failed
+            else effective_determinism_sample_count
         ),
-        "deterministic_rerun": _deterministic_status(
-            iterations,
-            deterministic,
+        "deterministic_rerun": (
+            None
+            if preflight_failed
+            else _deterministic_status(
+                iterations,
+                deterministic,
+            )
         ),
         "per_label_type": per_label_type,
     }

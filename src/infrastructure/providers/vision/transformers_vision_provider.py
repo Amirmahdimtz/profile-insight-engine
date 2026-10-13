@@ -40,6 +40,73 @@ def _require_bool(value: object, field_name: str) -> bool:
     return value
 
 
+def _build_prefix_allowed_tokens_fn(
+    *,
+    guide_type: type[Any],
+    index: Any,
+    prompt_token_count: int,
+    output_vocab_size: int,
+):
+    if (
+        isinstance(prompt_token_count, bool)
+        or not isinstance(prompt_token_count, int)
+        or prompt_token_count < 0
+    ):
+        raise VisionProviderError(
+            "transformers vision prompt token count is invalid"
+        )
+    if (
+        isinstance(output_vocab_size, bool)
+        or not isinstance(output_vocab_size, int)
+        or output_vocab_size <= 0
+    ):
+        raise VisionProviderError(
+            "transformers vision output vocabulary size is invalid"
+        )
+
+    def allowed_tokens(batch_id: int, input_ids: Any) -> list[int]:
+        if batch_id != 0:
+            raise VisionProviderError(
+                "transformers vision constrained generation only supports batch size one"
+            )
+        try:
+            token_ids = input_ids.tolist()
+            if (
+                token_ids
+                and isinstance(token_ids[0], list)
+            ):
+                if len(token_ids) != 1:
+                    raise VisionProviderError(
+                        "transformers vision constrained generation received an unexpected batch"
+                    )
+                token_ids = token_ids[0]
+            generated_ids = token_ids[prompt_token_count:]
+            guide = guide_type(index)
+            for token_id in generated_ids:
+                guide.advance(
+                    token_id=int(token_id),
+                    return_tokens=False,
+                )
+            allowed = [
+                int(token_id)
+                for token_id in guide.get_tokens()
+                if 0 <= int(token_id) < output_vocab_size
+            ]
+        except VisionProviderError:
+            raise
+        except Exception as exc:
+            raise VisionProviderError(
+                "transformers vision constraint state update failed"
+            ) from exc
+        if not allowed:
+            raise VisionProviderError(
+                "transformers vision constraint produced no valid model tokens"
+            )
+        return allowed
+
+    return allowed_tokens
+
+
 @dataclass(frozen=True)
 class TransformersVisionSettings:
     model_id: str
@@ -162,8 +229,9 @@ class TransformersVisionProvider(IVisionProvider):
         self._torch: Any | None = None
         self._processor: Any | None = None
         self._model: Any | None = None
-        self._logits_processor: Any | None = None
-        self._logits_processor_list_type: Any | None = None
+        self._constraint_index: Any | None = None
+        self._guide_type: type[Any] | None = None
+        self._output_vocab_size: int | None = None
         self._provider_version: str | None = None
         self._resolved_model_version: str | None = None
 
@@ -251,10 +319,10 @@ class TransformersVisionProvider(IVisionProvider):
             import num2words  # noqa: F401
             from huggingface_hub import hf_hub_download
             from outlines.backends import get_json_schema_logits_processor
+            from outlines_core import Guide
             from transformers import (
                 AutoModelForMultimodalLM,
                 AutoProcessor,
-                LogitsProcessorList,
             )
         except (ImportError, ModuleNotFoundError) as exc:
             raise VisionProviderError(
@@ -300,6 +368,27 @@ class TransformersVisionProvider(IVisionProvider):
             model.to(self._settings.device)
             model.eval()
 
+            output_embeddings = model.get_output_embeddings()
+            output_weight = getattr(
+                output_embeddings,
+                "weight",
+                None,
+            )
+            output_shape = getattr(
+                output_weight,
+                "shape",
+                (),
+            )
+            if not output_shape:
+                raise VisionProviderError(
+                    "transformers vision output vocabulary is unavailable"
+                )
+            output_vocab_size = int(output_shape[0])
+            if output_vocab_size <= 0:
+                raise VisionProviderError(
+                    "transformers vision output vocabulary is invalid"
+                )
+
             outlines_model = outlines.from_transformers(
                 model,
                 processor.tokenizer,
@@ -320,6 +409,15 @@ class TransformersVisionProvider(IVisionProvider):
                 outlines_model,
                 schema_text,
             )
+            constraint_index = getattr(
+                logits_processor,
+                "index",
+                None,
+            )
+            if constraint_index is None:
+                raise VisionProviderError(
+                    "transformers vision structured backend did not expose a constraint index"
+                )
         except VisionProviderError:
             raise
         except Exception as exc:
@@ -330,8 +428,9 @@ class TransformersVisionProvider(IVisionProvider):
         self._torch = torch
         self._processor = processor
         self._model = model
-        self._logits_processor = logits_processor
-        self._logits_processor_list_type = LogitsProcessorList
+        self._constraint_index = constraint_index
+        self._guide_type = Guide
+        self._output_vocab_size = output_vocab_size
         self._provider_version = (
             f"transformers-{transformers.__version__};"
             f"outlines-{importlib.metadata.version('outlines')}"
@@ -346,8 +445,9 @@ class TransformersVisionProvider(IVisionProvider):
             self._torch is None
             or self._processor is None
             or self._model is None
-            or self._logits_processor is None
-            or self._logits_processor_list_type is None
+            or self._constraint_index is None
+            or self._guide_type is None
+            or self._output_vocab_size is None
         ):
             raise VisionProviderError(
                 "transformers vision model is not initialized"
@@ -406,19 +506,31 @@ class TransformersVisionProvider(IVisionProvider):
                     "transformers vision processor violated single-tile configuration"
                 )
             input_token_count = int(inputs["input_ids"].shape[-1])
-            reset = getattr(self._logits_processor, "reset", None)
-            if callable(reset):
-                reset()
-            logits_processor = self._logits_processor_list_type(
-                [self._logits_processor]
-            )
-            with self._torch.inference_mode():
-                output_ids = self._model.generate(
-                    **inputs,
-                    do_sample=False,
-                    max_new_tokens=self._settings.max_tokens,
-                    logits_processor=logits_processor,
+            prefix_allowed_tokens_fn = (
+                _build_prefix_allowed_tokens_fn(
+                    guide_type=self._guide_type,
+                    index=self._constraint_index,
+                    prompt_token_count=input_token_count,
+                    output_vocab_size=self._output_vocab_size,
                 )
+            )
+            try:
+                with self._torch.inference_mode():
+                    output_ids = self._model.generate(
+                        **inputs,
+                        do_sample=False,
+                        max_new_tokens=self._settings.max_tokens,
+                        prefix_allowed_tokens_fn=(
+                            prefix_allowed_tokens_fn
+                        ),
+                    )
+            except VisionProviderError:
+                raise
+            except Exception as exc:
+                raise VisionProviderError(
+                    "transformers vision constrained generation failed "
+                    f"({type(exc).__name__})"
+                ) from exc
             generated_ids = output_ids[0][input_token_count:]
             generated_count = int(generated_ids.shape[-1])
             generated_text = self._processor.decode(
