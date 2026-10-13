@@ -37,6 +37,8 @@ OCR Phase 4 did not establish a universal winner: `tessdata_best` was slightly b
 
 Vision Phase 5 is negative selection evidence for the current candidates. Gemma 3 4B failed the offline-load preflight. Qwen2.5-VL 3B completed a reduced evaluation but had 13/18 request timeouts, overall F1 `0.0`, p50 around `276993 ms`, and p95 around `298460 ms`. The current Vision candidate has previously shown very high latency/timeouts and is not production-final.
 
+Phase 10 target-host diagnostics additionally rejected the llama.cpp path on the CPU-only workstation: Qwen2-VL 2B, SmolVLM2 2.2B and SmolVLM2 256M all exceeded the 120-second request budget on a clean single-image probe. Direct Transformers inference with `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` identified image splitting as the dominant bottleneck: the default processor produced 17 image tiles and a first-token latency around 102 seconds, while disabling image splitting and using one 512px tile reduced first-token latency to about 13.8 seconds and completed a 32-token generation in about 14.3 seconds. Prompt-only JSON remained fail-closed because a 256-token response ended with an unclosed JSON object. `lm-format-enforcer==0.11.3` was rejected because its Transformers integration is incompatible with the repository's pinned `transformers==5.18.0`. These measurements are diagnostic evidence only; the constrained Transformers candidate still requires the repository benchmark below before production selection.
+
 Embedding Phase 6 measured strong retrieval for `google/siglip2-base-patch16-224` (Recall@5 about `0.9907`, mAP about `0.9183`) but theme Macro F1 at threshold `0.25` was `0.0`. Model/threshold selection therefore remains unresolved.
 
 Phase 8 has deterministic contract evidence and structural summary factuality, but no authorized insight-level correctness labels. Product insight precision and confidence calibration remain `unavailable`.
@@ -71,7 +73,7 @@ Existing privacy boundaries remain: raw upload bytes are not persisted; canonica
 
 ## Local deployment configuration
 
-The verified topology is a local FastAPI process, PostgreSQL, Tesseract OCR, local llama.cpp Vision runtime, plus the separately benchmarked Transformers embedding runtime. Core/Application do not depend on GGUF, Safetensors, PyTorch or ONNX details.
+The current production-wired topology is a local FastAPI process, PostgreSQL, Tesseract OCR, local llama.cpp Vision runtime, plus the separately benchmarked Transformers embedding runtime. Phase 10 also contains an explicit, non-DI-bound Transformers Vision candidate used only by the candidate benchmark until evidence review selects a provider. Core/Application do not depend on GGUF, Safetensors, PyTorch, Outlines or ONNX details.
 
 No new application Docker/Compose topology is introduced because the current target is a Windows workstation with an external loopback llama.cpp runtime; containerizing the API would change that verified topology without evidence. Docker is used only for reproducible PostgreSQL verification.
 
@@ -138,6 +140,35 @@ python scripts/collect_phase10_hardware.py --output phase10_hardware_profile.jso
 
 If `llama-server` is not on PATH, use `--llama-server-executable` with its local executable path.
 
+### Transformers Vision candidate benchmark
+
+The Phase 10 candidate uses `HuggingFaceTB/SmolVLM2-256M-Video-Instruct` through the pinned Transformers runtime, a single 512px image tile, and Outlines JSON-schema constrained decoding. It is intentionally not registered as the active `IVisionProvider` yet; the existing `vision.provider` setting remains unchanged until this benchmark evidence is reviewed.
+
+If the model is not already cached, acquire it once while network access is available:
+
+```powershell
+python -c "from huggingface_hub import snapshot_download; print(snapshot_download(repo_id='HuggingFaceTB/SmolVLM2-256M-Video-Instruct', revision='main'))"
+```
+
+Then run the real 18-sample evaluation offline from repository root:
+
+```powershell
+$DatasetRoot = "E:\phase2-real-dataset"
+
+python -m evaluation.transformers_vision_benchmark `
+  --manifest "$DatasetRoot\manifest.json" `
+  --dataset-root "$DatasetRoot" `
+  --iterations 2 `
+  --determinism-sample-count 3 `
+  --expected-manifest-fingerprint "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc" `
+  --expected-dataset-content-fingerprint "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e" `
+  --output .\phase10_transformers_vision_benchmark.json
+
+if ($LASTEXITCODE -ne 0) { throw "Transformers Vision benchmark failed" }
+```
+
+The report records the resolved Hugging Face snapshot, provider/runtime versions, per-type precision/recall/F1, unsupported-claim rates, p50/p95 latency, failure rate and deterministic reruns. Raw generated model text and raw image bytes are not written to the benchmark report.
+
 ### End-to-end benchmark
 
 Set `DATASET_ROOT` to the authorized Phase 2 dataset directory, then run:
@@ -162,7 +193,7 @@ After the prior phase benchmark JSON files are available locally:
 ```powershell
 python -m evaluation.phase10_benchmark `
   --ocr-report .\phase4_ocr_benchmark.json `
-  --vision-report .\phase5_vision_benchmark.json `
+  --vision-report .\phase10_transformers_vision_benchmark.json `
   --embedding-report .\phase6_embedding_benchmark.json `
   --insight-report .\phase8_insight_benchmark.json `
   --api-persistence-report .\phase9_api_persistence_benchmark.json `
@@ -206,7 +237,7 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 `UNRESOLVED`
 
-No OCR traineddata choice, Vision model/config, Embedding model/config, semantic threshold or Insight threshold is production-final in this implementation commit. Existing appsettings remain candidate configuration.
+No OCR traineddata choice, Vision model/config, Embedding model/config, semantic threshold or Insight threshold is production-final in this implementation commit. The new Transformers Vision adapter remains benchmark-only and deliberately unbound from DI until its target-host report is reviewed; the active appsettings provider remains unchanged.
 
 ## Acceptance evidence still required
 
