@@ -1,14 +1,30 @@
 import unittest
+from pathlib import Path
 
+from evaluation.benchmark import load_manifest
 from evaluation.transformers_vision_benchmark import (
     METRIC_SCOPE,
     REPORT_SCHEMA_VERSION,
+    _manifest_identity,
     _report_exit_code,
     _sample_iteration_count,
 )
 
 
 class TransformersVisionBenchmarkContractTests(unittest.TestCase):
+    def test_report_metadata_uses_real_manifest_dataset_version_contract(self):
+        manifest = load_manifest(
+            Path(__file__).resolve().parents[1]
+            / "evaluation"
+            / "fixtures"
+            / "sanity_manifest.json"
+        )
+        self.assertEqual(
+            _manifest_identity(manifest),
+            ("phase2_sanity_fixture", "1.0.0"),
+        )
+        self.assertFalse(hasattr(manifest, "version"))
+
     def test_report_contract_is_phase10_scoped(self):
         self.assertEqual(
             REPORT_SCHEMA_VERSION,

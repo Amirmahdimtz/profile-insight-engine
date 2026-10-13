@@ -72,6 +72,10 @@ def _report_exit_code(report: Mapping[str, Any]) -> int:
     return 0 if candidate.get("benchmark_valid") is True else 2
 
 
+def _manifest_identity(manifest: Any) -> tuple[str, str]:
+    return manifest.dataset_id, manifest.dataset_version
+
+
 async def run_transformers_vision_benchmark_async(
     *,
     manifest: Any,
@@ -358,11 +362,13 @@ async def run_transformers_vision_benchmark_async(
         "per_label_type": per_label_type,
     }
 
+    dataset_id, dataset_version = _manifest_identity(manifest)
+
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "metric_scope": METRIC_SCOPE,
-        "dataset_id": manifest.dataset_id,
-        "dataset_version": manifest.version,
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
         "manifest_fingerprint": manifest_fingerprint,
         "dataset_content_fingerprint": dataset_content_fingerprint,
         "coverage": audit_visual_label_coverage(manifest),
