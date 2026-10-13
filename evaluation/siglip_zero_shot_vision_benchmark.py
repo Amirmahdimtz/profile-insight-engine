@@ -253,6 +253,22 @@ async def run_siglip_zero_shot_vision_benchmark_async(
     scores_by_type: dict[str, list[float]] = {
         kind.value: [] for kind in VisionEvidenceKind
     }
+    expected_scores_by_type: dict[str, list[float]] = {
+        kind.value: [] for kind in VisionEvidenceKind
+    }
+    expected_labels_by_sample: dict[
+        str,
+        set[tuple[VisionEvidenceKind, str]],
+    ] = {}
+    for sample in eval_samples:
+        expected_labels_by_sample[sample.sample_id] = {
+            (
+                _KIND_BY_LABEL_TYPE[label.type],
+                _expected_visual_value(label),
+            )
+            for label in sample.ground_truth.labels
+            if label.type in _VISUAL_LABEL_TYPES
+        }
     latencies_ms: list[float] = []
     failure_reasons: dict[str, int] = {}
     attempted_samples = 0
@@ -332,6 +348,15 @@ async def run_siglip_zero_shot_vision_benchmark_async(
                             scores_by_type[
                                 item.kind.value
                             ].append(item.score)
+                            if (
+                                item.kind,
+                                item.label,
+                            ) in expected_labels_by_sample[
+                                sample.sample_id
+                            ]:
+                                expected_scores_by_type[
+                                    item.kind.value
+                                ].append(item.score)
                     signatures.append(
                         tuple(
                             (
@@ -516,6 +541,9 @@ async def run_siglip_zero_shot_vision_benchmark_async(
         ),
         "score_diagnostics_by_type": _score_diagnostics(
             scores_by_type
+        ),
+        "expected_score_diagnostics_by_type": _score_diagnostics(
+            expected_scores_by_type
         ),
         "determinism_sample_count": (
             0
