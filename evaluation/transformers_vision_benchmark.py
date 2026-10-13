@@ -184,7 +184,6 @@ async def run_transformers_vision_benchmark_async(
                 tuple[tuple[str, str, float], ...]
             ] = []
             first_result = None
-            first_provider_result = None
             run_count = _sample_iteration_count(
                 sample_index=sample_index,
                 iterations=iterations,
@@ -198,6 +197,12 @@ async def run_transformers_vision_benchmark_async(
                     provider_result = await provider.extract_async(
                         batch.images[0]
                     )
+                    if iteration_index == 0:
+                        provider_version = provider_result.provider_version
+                        model_version = provider_result.model_version
+                        pre_policy_claims.extend(
+                            _provider_claims(provider_result)
+                        )
                     result = service.normalize_result(
                         batch.images[0],
                         provider_result,
@@ -207,7 +212,6 @@ async def run_transformers_vision_benchmark_async(
                             (time.perf_counter() - started) * 1000.0
                         )
                         first_result = result
-                        first_provider_result = provider_result
                     signatures.append(
                         tuple(
                             (
@@ -230,13 +234,6 @@ async def run_transformers_vision_benchmark_async(
                     failure_reasons.get(reason, 0) + 1
                 )
                 continue
-
-            if first_provider_result is not None:
-                provider_version = first_provider_result.provider_version
-                model_version = first_provider_result.model_version
-                pre_policy_claims.extend(
-                    _provider_claims(first_provider_result)
-                )
 
             if first_result is not None:
                 for evidence in first_result.evidence:
