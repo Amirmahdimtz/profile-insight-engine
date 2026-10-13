@@ -23,6 +23,7 @@ class Phase10DocumentationTests(unittest.TestCase):
         for fragment in (
             "python scripts/verify_phase10.py",
             "python scripts/collect_phase10_hardware.py",
+            "python -m evaluation.transformers_vision_benchmark",
             "python -m evaluation.phase10_end_to_end_benchmark",
             "python -m evaluation.phase10_benchmark",
             "python -m alembic -c src/infrastructure/alembic.ini upgrade head",
@@ -34,6 +35,9 @@ class Phase10DocumentationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
         self.assertIn("Do not use `--workers > 1`", text)
+        self.assertIn("single 512px image tile", text)
+        self.assertIn("Outlines JSON-schema constrained decoding", text)
+        self.assertIn("benchmark-only and deliberately unbound from DI", text)
 
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):
         text = DOC.read_text(encoding="utf-8")

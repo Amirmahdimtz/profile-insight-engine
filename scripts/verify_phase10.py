@@ -163,6 +163,8 @@ def main() -> int:
                 "tests.test_phase10_benchmark",
                 "tests.test_phase10_local_verification",
                 "tests.test_phase10_documentation",
+                "tests.test_transformers_vision_provider",
+                "tests.test_transformers_vision_benchmark",
                 "tests.test_phase9_architecture",
                 "tests.test_phase9_di_discovery",
                 "-v",

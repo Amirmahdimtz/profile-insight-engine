@@ -38,6 +38,20 @@ vision:
   top_p: 1.0
   seed: 0
   confidence_semantics: model_self_reported_uncalibrated
+  transformers_candidate:
+    model_id: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+    model_revision: main
+    config_version: phase10-transformers-smolvlm2-256m-single-tile-v1
+    device: cpu
+    local_files_only: true
+    image_longest_edge: 512
+    do_image_splitting: false
+    max_tokens: 256
+    max_observations_per_kind: 1
+    max_label_chars: 32
+    max_caption_chars: 80
+    confidence_semantics: model_self_reported_uncalibrated
+    structured_backend: outlines_core
 embedding:
   provider: transformers
   model_id: google/siglip2-base-patch16-224
