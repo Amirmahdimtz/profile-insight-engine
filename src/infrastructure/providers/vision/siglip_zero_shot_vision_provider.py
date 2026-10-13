@@ -178,15 +178,20 @@ def _normalize_taxonomy(
             "vision taxonomy must be a mapping"
         )
     normalized: dict[VisionEvidenceKind, tuple[str, ...]] = {}
+    unknown = set(taxonomy) - set(VisionEvidenceKind)
+    if unknown:
+        raise VisionValidationError(
+            "vision taxonomy contains unsupported evidence kinds"
+        )
+    total_labels = 0
     for kind in VisionEvidenceKind:
-        values = taxonomy.get(kind)
+        values = taxonomy.get(kind, ())
         if (
             isinstance(values, (str, bytes, bytearray))
             or not isinstance(values, Sequence)
-            or not values
         ):
             raise VisionValidationError(
-                f"vision taxonomy must contain labels for {kind.value}"
+                f"vision taxonomy {kind.value} labels must be a sequence"
             )
         labels = tuple(
             sorted(
@@ -205,10 +210,10 @@ def _normalize_taxonomy(
                 f"vision taxonomy {kind.value} labels must be unique"
             )
         normalized[kind] = labels
-    unknown = set(taxonomy) - set(VisionEvidenceKind)
-    if unknown:
+        total_labels += len(labels)
+    if total_labels == 0:
         raise VisionValidationError(
-            "vision taxonomy contains unsupported evidence kinds"
+            "vision taxonomy must contain at least one label"
         )
     return normalized
 
