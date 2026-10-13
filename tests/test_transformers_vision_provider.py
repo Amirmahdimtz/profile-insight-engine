@@ -9,6 +9,7 @@ from src.infrastructure.providers.vision.transformers_vision_provider import (
     TransformersVisionProvider,
     TransformersVisionSettings,
 )
+from src.infrastructure.utils.config_reader import ConfigReader
 
 
 def _settings() -> TransformersVisionSettings:
@@ -176,6 +177,15 @@ class TransformersVisionProviderTests(
 
 
 class TransformersVisionSettingsTests(unittest.TestCase):
+    def test_repository_config_keeps_candidate_single_tile_and_offline(self):
+        settings = TransformersVisionSettings.from_config(ConfigReader())
+        self.assertEqual(settings.device, "cpu")
+        self.assertTrue(settings.local_files_only)
+        self.assertFalse(settings.do_image_splitting)
+        self.assertEqual(settings.image_longest_edge, 512)
+        self.assertEqual(settings.max_observations_per_kind, 1)
+        self.assertEqual(settings.structured_backend, "outlines_core")
+
     def test_rejects_non_boolean_split_setting(self):
         values = _settings().__dict__ | {
             "do_image_splitting": 0
