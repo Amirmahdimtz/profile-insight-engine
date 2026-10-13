@@ -48,8 +48,9 @@ class Phase10DocumentationTests(unittest.TestCase):
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("`unavailable`", text)
-        self.assertIn("No OCR traineddata choice, Vision model/config, Embedding model/config", text)
-        self.assertIn("current Vision candidate has previously shown very high latency/timeouts", text)
+        self.assertIn("No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet", text)
+        self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
+        self.assertIn("No acceptable local Vision model/provider configuration", text)
         self.assertNotIn("Qwen2.5-VL-3B is the production model", text)
         self.assertNotIn("SigLIP2 is the production model", text)
 
