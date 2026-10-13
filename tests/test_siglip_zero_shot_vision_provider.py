@@ -170,10 +170,10 @@ class SiglipZeroShotVisionProviderTests(unittest.TestCase):
         score_source = inspect.getsource(
             SiglipZeroShotVisionProvider._score_image_sync
         )
-        self.assertIn(
-            "AutoModelForZeroShotImageClassification",
-            load_source,
-        )
+        self.assertIn("AutoModel", load_source)
+        self.assertIn("get_text_features", load_source)
+        self.assertIn("get_image_features", score_source)
+        self.assertIn("_text_features", score_source)
         self.assertIn(
             "local_files_only=self._settings.local_files_only",
             load_source,
