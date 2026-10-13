@@ -249,7 +249,7 @@ class TransformersVisionProvider(IVisionProvider):
             import transformers
             import torchvision  # noqa: F401
             import num2words  # noqa: F401
-            from huggingface_hub import snapshot_download
+            from huggingface_hub import hf_hub_download
             from outlines.backends import get_json_schema_logits_processor
             from transformers import (
                 AutoModelForMultimodalLM,
@@ -262,22 +262,41 @@ class TransformersVisionProvider(IVisionProvider):
             ) from exc
 
         try:
-            snapshot_path = Path(
-                snapshot_download(
-                    repo_id=self._settings.model_id,
-                    revision=self._settings.model_revision,
-                    local_files_only=self._settings.local_files_only,
+            if self._settings.local_files_only:
+                config_path = Path(
+                    hf_hub_download(
+                        repo_id=self._settings.model_id,
+                        filename="config.json",
+                        revision=self._settings.model_revision,
+                        local_files_only=True,
+                    )
                 )
-            )
+                model_source: str | Path = config_path.parent
+                load_revision: str | None = None
+            else:
+                model_source = self._settings.model_id
+                load_revision = self._settings.model_revision
+
             processor = AutoProcessor.from_pretrained(
-                snapshot_path,
-                local_files_only=True,
+                model_source,
+                revision=load_revision,
+                local_files_only=self._settings.local_files_only,
             )
             model = AutoModelForMultimodalLM.from_pretrained(
-                snapshot_path,
-                local_files_only=True,
+                model_source,
+                revision=load_revision,
+                local_files_only=self._settings.local_files_only,
                 dtype=torch.float32,
             )
+            config_path = Path(
+                hf_hub_download(
+                    repo_id=self._settings.model_id,
+                    filename="config.json",
+                    revision=self._settings.model_revision,
+                    local_files_only=True,
+                )
+            )
+            snapshot_path = config_path.parent
             model.to(self._settings.device)
             model.eval()
 
