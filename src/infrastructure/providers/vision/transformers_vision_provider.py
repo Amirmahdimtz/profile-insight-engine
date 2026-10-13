@@ -393,6 +393,18 @@ class TransformersVisionProvider(IVisionProvider):
                 processor_kwargs=self._processor_kwargs(),
             )
             inputs = inputs.to(self._settings.device)
+            pixel_values = inputs.get("pixel_values")
+            pixel_shape = getattr(pixel_values, "shape", ())
+            if (
+                not self._settings.do_image_splitting
+                and (
+                    len(pixel_shape) < 2
+                    or int(pixel_shape[1]) != 1
+                )
+            ):
+                raise VisionProviderError(
+                    "transformers vision processor violated single-tile configuration"
+                )
             input_token_count = int(inputs["input_ids"].shape[-1])
             reset = getattr(self._logits_processor, "reset", None)
             if callable(reset):
