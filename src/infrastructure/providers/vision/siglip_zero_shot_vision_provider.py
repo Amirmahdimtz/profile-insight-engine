@@ -47,6 +47,21 @@ def _require_probability(value: object, field_name: str) -> float:
     return normalized
 
 
+def _feature_tensor(value: Any) -> Any:
+    pooler_output = getattr(value, "pooler_output", None)
+    if pooler_output is not None:
+        return pooler_output
+    if hasattr(value, "detach"):
+        return value
+    if isinstance(value, (tuple, list)) and value:
+        candidate = value[1] if len(value) > 1 else value[0]
+        if hasattr(candidate, "detach"):
+            return candidate
+    raise VisionProviderError(
+        "siglip zero-shot runtime returned unsupported feature output"
+    )
+
+
 @dataclass(frozen=True)
 class SiglipZeroShotVisionSettings:
     model_id: str
@@ -241,6 +256,7 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
         self._torch: Any | None = None
         self._processor: Any | None = None
         self._model: Any | None = None
+        self._text_features: Any | None = None
         self._provider_version: str | None = None
         self._resolved_model_version: str | None = None
 
@@ -390,7 +406,7 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
             import transformers
             from huggingface_hub import hf_hub_download
             from transformers import (
-                AutoModelForZeroShotImageClassification,
+                AutoModel,
                 AutoProcessor,
             )
         except (ImportError, ModuleNotFoundError) as exc:
@@ -419,7 +435,7 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
                 revision=load_revision,
                 local_files_only=self._settings.local_files_only,
             )
-            model = AutoModelForZeroShotImageClassification.from_pretrained(
+            model = AutoModel.from_pretrained(
                 model_source,
                 revision=load_revision,
                 local_files_only=self._settings.local_files_only,
@@ -435,10 +451,7 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
             snapshot_path = config_path.parent
             model.to(self._settings.device)
             model.eval()
-            if (
-                not callable(getattr(processor, "image_processor", None))
-                and getattr(processor, "image_processor", None) is None
-            ):
+            if getattr(processor, "image_processor", None) is None:
                 raise VisionProviderError(
                     "siglip zero-shot processor has no image processor"
                 )
@@ -446,6 +459,46 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
                 raise VisionProviderError(
                     "siglip zero-shot processor has no tokenizer"
                 )
+            if not callable(getattr(model, "get_text_features", None)):
+                raise VisionProviderError(
+                    "siglip zero-shot model has no text feature method"
+                )
+            if not callable(getattr(model, "get_image_features", None)):
+                raise VisionProviderError(
+                    "siglip zero-shot model has no image feature method"
+                )
+            if (
+                getattr(model, "logit_scale", None) is None
+                or getattr(model, "logit_bias", None) is None
+            ):
+                raise VisionProviderError(
+                    "siglip zero-shot model similarity calibration is unavailable"
+                )
+
+            texts = [
+                self._settings.hypothesis_template.format(label)
+                for _, label in self._entries
+            ]
+            text_inputs = processor.tokenizer(
+                texts,
+                padding="max_length",
+                max_length=64,
+                truncation=True,
+                return_tensors="pt",
+            )
+            text_inputs = {
+                name: value.to(self._settings.device)
+                for name, value in dict(text_inputs).items()
+            }
+            with torch.inference_mode():
+                text_features = _feature_tensor(
+                    model.get_text_features(**text_inputs)
+                )
+            text_features = text_features / text_features.norm(
+                p=2,
+                dim=-1,
+                keepdim=True,
+            )
         except VisionProviderError:
             raise
         except Exception as exc:
@@ -456,6 +509,7 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
         self._torch = torch
         self._processor = processor
         self._model = model
+        self._text_features = text_features
         self._provider_version = f"transformers-{transformers.__version__}"
         self._resolved_model_version = snapshot_path.name
 
@@ -467,15 +521,12 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
             self._torch is None
             or self._processor is None
             or self._model is None
+            or self._text_features is None
         ):
             raise VisionProviderError(
                 "siglip zero-shot vision model is not initialized"
             )
 
-        texts = [
-            self._settings.hypothesis_template.format(label)
-            for _, label in self._entries
-        ]
         try:
             with Image.open(image_path) as source:
                 source.load()
@@ -485,24 +536,39 @@ class SiglipZeroShotVisionProvider(IVisionProvider):
                     images=[image],
                     return_tensors="pt",
                 )
-                text_inputs = self._processor.tokenizer(
-                    texts,
-                    padding="max_length",
-                    max_length=64,
-                    truncation=True,
-                    return_tensors="pt",
-                )
-                inputs = {
-                    **dict(image_inputs),
-                    **dict(text_inputs),
-                }
-                inputs = {
+                image_inputs = {
                     name: value.to(self._settings.device)
-                    for name, value in inputs.items()
+                    for name, value in dict(image_inputs).items()
                 }
                 with self._torch.inference_mode():
-                    outputs = self._model(**inputs)
-                logits = getattr(outputs, "logits_per_image", None)
+                    image_features = _feature_tensor(
+                        self._model.get_image_features(
+                            **image_inputs
+                        )
+                    )
+                image_features = (
+                    image_features
+                    / image_features.norm(
+                        p=2,
+                        dim=-1,
+                        keepdim=True,
+                    )
+                )
+                logits = self._torch.matmul(
+                    image_features,
+                    self._text_features.t().to(
+                        image_features.device
+                    ),
+                )
+                logits = (
+                    logits
+                    * self._model.logit_scale.to(
+                        logits.device
+                    ).exp()
+                    + self._model.logit_bias.to(
+                        logits.device
+                    )
+                )
                 shape = getattr(logits, "shape", ())
                 if (
                     len(shape) != 2
