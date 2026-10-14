@@ -52,7 +52,9 @@ The final target-host Transformers candidate benchmark has now been returned and
 
 This is valid benchmark evidence, not an acceptable production selection. In this benchmark family, `benchmark_valid=true` means the benchmark completed with enough measurable output to produce metrics; it does **not** mean the candidate is production-ready. The reviewed SmolVLM2-256M Transformers candidate is therefore rejected for the current target hardware/configuration.
 
-The project-finalization path does not introduce another generative VLM. It reuses the already benchmarked local `google/siglip2-base-patch16-224` vision-language encoder as a zero-shot visual classifier. The candidate receives only the global scene/object/activity/topic class universe from the versioned Phase 2 manifest; it never receives the per-image ground-truth assignment. It emits no synthetic caption, uses independent SigLIP sigmoid scores as explicitly uncalibrated confidence, and remains benchmark-only until target-host evidence is reviewed.
+The project-finalization path does not introduce another generative VLM. It reuses the already benchmarked local `google/siglip2-base-patch16-224` vision-language encoder as a zero-shot visual classifier. The first target-host run demonstrated strong runtime behavior: 18/18 samples completed, failure rate was `0.0`, deterministic reruns passed, p50 latency was about `1210 ms`, and the closed-set report measured precision about `0.909`, recall about `0.476`, and F1 about `0.625` for resolved snapshot `75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2`.
+
+That first quality score is diagnostic-only because the candidate vocabulary was assembled from the complete versioned manifest, including EVAL annotations. The report did not expose the correct per-image assignment, but its class universe still contained the answer vocabulary from the holdout set and therefore is not sufficient evidence for production selection. The selection-safe protocol now builds the candidate taxonomy from TRAIN labels only and evaluates all EVAL labels unchanged. EVAL labels absent from the TRAIN taxonomy remain in the recall denominator. This prevents benchmark-answer vocabulary leakage while retaining the valid target-host runtime evidence. The provider emits no synthetic caption, uses independent SigLIP sigmoid scores as explicitly uncalibrated confidence, and remains benchmark-only until holdout-safe evidence is reviewed.
 
 Embedding Phase 6 measured strong retrieval for `google/siglip2-base-patch16-224` (Recall@5 about `0.9907`, mAP about `0.9183`) but theme Macro F1 at threshold `0.25` was `0.0`. Those retrieval results justify evaluating the same already-local model as a zero-shot Vision classifier; they do not pre-approve its Vision quality or threshold.
 
@@ -186,7 +188,7 @@ The report records the resolved Hugging Face snapshot, provider/runtime versions
 
 ### SigLIP2 zero-shot Vision finalization benchmark
 
-This is the final local/offline Vision candidate under the current CPU-only constraint. It uses the existing `google/siglip2-base-patch16-224` model through Transformers zero-shot image classification semantics. The versioned manifest supplies the global visual class universe only; sample-specific ground-truth mappings are never passed to the provider.
+This is the final local/offline Vision candidate under the current CPU-only constraint. It uses the existing `google/siglip2-base-patch16-224` model through Transformers zero-shot image classification semantics. The versioned manifest supplies the visual class universe from the TRAIN split only; EVAL labels are never used to construct the candidate taxonomy and sample-specific ground-truth mappings are never passed to the provider.
 
 The repository candidate configuration is CPU-only, `local_files_only=true`, `minimum_score=0.10`, at most one observation per visual kind, and the standard zero-shot hypothesis template `This is a photo of {}.`. The threshold is a candidate setting recorded in the report, not a production-final value.
 
@@ -213,7 +215,7 @@ python -m evaluation.siglip_zero_shot_vision_benchmark `
 if ($LASTEXITCODE -ne 0) { throw "SigLIP2 zero-shot Vision benchmark failed" }
 ```
 
-The candidate benchmark fails closed if any evaluation image has a runtime failure. A zero exit code means the complete benchmark produced reliable metrics; it does not automatically promote the candidate. The report includes the resolved model snapshot, taxonomy and taxonomy fingerprint, configured threshold, Precision/Recall/F1, unsupported-claim rates, score diagnostics, p50/p95 latency, failure rate and deterministic reruns. Raw image bytes are never written to the report.
+The candidate benchmark fails before model loading if the TRAIN split contains no visual taxonomy labels, and fails closed if any evaluation image has a runtime failure. A zero exit code means the complete holdout-safe benchmark produced reliable metrics; it does not automatically promote the candidate. The report includes the resolved model snapshot, TRAIN-derived taxonomy and taxonomy fingerprint, EVAL taxonomy-coverage diagnostics, configured threshold, Precision/Recall/F1, unsupported-claim rates, score diagnostics, p50/p95 latency, failure rate and deterministic reruns. Raw image bytes are never written to the report.
 
 ### End-to-end benchmark
 

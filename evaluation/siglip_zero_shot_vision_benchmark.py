@@ -70,6 +70,8 @@ def _taxonomy_from_manifest(
         kind: set() for kind in VisionEvidenceKind
     }
     for sample in manifest.samples:
+        if sample.split is not DatasetSplit.TRAIN:
+            continue
         for label in sample.ground_truth.labels:
             kind = _KIND_BY_LABEL_TYPE.get(label.type)
             if kind is not None:
@@ -83,6 +85,35 @@ def _taxonomy_from_manifest(
         )
         for kind in VisionEvidenceKind
     }
+
+
+def _taxonomy_coverage(
+    *,
+    eval_samples: Sequence[Any],
+    taxonomy: Mapping[VisionEvidenceKind, Sequence[str]],
+) -> dict[str, dict[str, float | int]]:
+    report: dict[str, dict[str, float | int]] = {}
+    for label_type in _VISUAL_LABEL_TYPES:
+        kind = _KIND_BY_LABEL_TYPE[label_type]
+        taxonomy_labels = set(taxonomy.get(kind, ()))
+        expected = [
+            _expected_visual_value(label)
+            for sample in eval_samples
+            for label in sample.ground_truth.labels
+            if label.type is label_type
+        ]
+        covered = sum(
+            1 for value in expected if value in taxonomy_labels
+        )
+        report[label_type.value] = {
+            "taxonomy_label_count": len(taxonomy_labels),
+            "eval_expected_count": len(expected),
+            "eval_expected_covered_count": covered,
+            "eval_expected_coverage": (
+                covered / len(expected) if expected else 1.0
+            ),
+        }
+    return report
 
 
 def _taxonomy_fingerprint(
@@ -201,16 +232,14 @@ async def run_siglip_zero_shot_vision_benchmark_async(
         )
 
     taxonomy = _taxonomy_from_manifest(manifest)
-    missing_taxonomy_types = [
-        kind.value
-        for kind in VisionEvidenceKind
-        if not taxonomy[kind]
-    ]
-    if missing_taxonomy_types:
+    if not any(taxonomy[kind] for kind in VisionEvidenceKind):
         raise ValueError(
-            "visual taxonomy is missing labels for: "
-            + ", ".join(missing_taxonomy_types)
+            "training split must contain at least one visual taxonomy label"
         )
+    taxonomy_coverage = _taxonomy_coverage(
+        eval_samples=eval_samples,
+        taxonomy=taxonomy,
+    )
 
     config = ConfigReader()
     settings = SiglipZeroShotVisionSettings.from_config(config)
@@ -500,10 +529,13 @@ async def run_siglip_zero_shot_vision_benchmark_async(
             settings.max_observations_per_kind
         ),
         "confidence_semantics": settings.confidence_semantics,
+        "evaluation_protocol": "train_taxonomy_eval_holdout",
+        "selection_protocol_safe": True,
         "taxonomy_source": (
-            "global_visual_class_universe_from_versioned_manifest"
+            "train_visual_class_universe_from_versioned_manifest"
         ),
         "taxonomy": taxonomy_report,
+        "taxonomy_coverage": taxonomy_coverage,
         "taxonomy_fingerprint": _taxonomy_fingerprint(taxonomy),
         "sample_count": len(eval_samples),
         "attempted_sample_count": attempted_samples,
