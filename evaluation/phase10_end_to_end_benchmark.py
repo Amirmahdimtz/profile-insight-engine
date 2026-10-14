@@ -263,6 +263,9 @@ async def run_async(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("evaluation manifest has no eval samples")
     config = ConfigReader()
     max_images = config.get_positive_int("profile_analysis.max_images")
+    vision_enabled = config.get("vision.enabled")
+    if not isinstance(vision_enabled, bool):
+        raise ValueError("vision.enabled must be boolean")
     bootstrap_di()
     service = resolve(ProfileAnalysisService)
     repository = resolve(ProfileAnalysisRepository)
@@ -320,6 +323,10 @@ async def run_async(args: argparse.Namespace) -> dict[str, Any]:
         "dataset_content_fingerprint": content_fingerprint,
         "workload_sizes": list(args.workload_size),
         "configured_max_images": max_images,
+        "deployment_profile": {
+            "vision_enabled": vision_enabled,
+            "semantic_theme_active": False,
+        },
         "iterations": args.iterations,
         "workloads": workloads,
         "concurrency": concurrency,
@@ -363,6 +370,7 @@ async def run_async(args: argparse.Namespace) -> dict[str, Any]:
             ),
         },
         "limitations": [
+            ("Vision extraction is intentionally disabled in the selected degraded production profile." if not vision_enabled else "Vision extraction is enabled for this benchmark run."),
             "The production HTTP workflow intentionally does not inject SemanticThemeService because no production candidate-theme source exists in the Phase 9 contract.",
             "End-to-end accuracy and insight precision are unavailable without authorized end-to-end/insight-level ground truth.",
             "VRAM and provider-specific warmup are supplied by provider benchmark reports rather than inferred from this service-process runner.",

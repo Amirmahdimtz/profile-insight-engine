@@ -75,6 +75,32 @@ class Phase10BenchmarkTests(unittest.TestCase):
             }.issubset(failures)
         )
 
+    def test_degraded_profile_acceptance_requires_rejection_and_clean_e2e(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+
+            def write(name, payload):
+                path = root / name
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                return path
+
+            ocr = write("ocr.json", {"schema_version": "1.0.0", "candidates": [{"candidate": "tessdata_best", "deterministic_rerun": True}]})
+            vision = write("vision.json", {"schema_version": "phase10-siglip-zero-shot-vision-benchmark-v1", "candidate": {"selection_protocol_safe": True, "benchmark_valid": True, "failure_rate": 0.0, "f1": 0.0}})
+            insight = write("insight.json", {"schema_version": "phase8-insight-benchmark-v1"})
+            api = write("api.json", {"schema_version": "phase9-api-persistence-benchmark-v1"})
+            hardware = write("hardware.json", {"schema_version": "phase10-hardware-profile-v1"})
+            e2e = write("e2e.json", {"schema_version": "phase10-end-to-end-benchmark-v1", "deployment_profile": {"vision_enabled": False, "semantic_theme_active": False}, "performance": {"failure_rate": 0.0}, "quality": {"unsupported_claim_rate_post_validation": 0.0, "summary_structural_factuality": True}, "concurrency": {"failed_requests": 0, "request_isolation": True}})
+            args = argparse.Namespace(ocr_report=ocr, vision_report=vision, embedding_report=None, insight_report=insight, api_persistence_report=api, e2e_report=e2e, hardware_report=hardware, deployment_profile="degraded_ocr_only")
+            report = build_report(args)
+
+        self.assertTrue(report["acceptance_ready"])
+        self.assertEqual(report["missing_evidence"], [])
+        self.assertEqual(report["input_evidence"]["embedding"]["status"], "not_required")
+        self.assertEqual(report["production_selection"]["vision"], "disabled_rejected_by_holdout_evidence")
+        self.assertTrue(report["selection_evidence"]["vision_rejection_evidence_valid"])
+        self.assertTrue(report["selection_evidence"]["e2e_degraded_profile_valid"])
+
+
 
 if __name__ == "__main__":
     unittest.main()

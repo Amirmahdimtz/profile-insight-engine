@@ -203,6 +203,7 @@ def main() -> int:
             [
                 sys.executable, "-m", "evaluation.phase10_benchmark",
                 "--hardware-report", str(HARDWARE_OUTPUT),
+                "--deployment-profile", "degraded_ocr_only",
                 "--output", str(BENCHMARK_OUTPUT),
             ],
             env=env,

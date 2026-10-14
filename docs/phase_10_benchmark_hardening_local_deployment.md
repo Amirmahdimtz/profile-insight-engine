@@ -245,7 +245,7 @@ The candidate benchmark fails before model loading if the TRAIN split contains n
 
 ### End-to-end benchmark
 
-Set `DATASET_ROOT` to the authorized Phase 2 dataset directory, then run:
+Set `DATASET_ROOT` to the authorized Phase 2 dataset directory. Ensure `PROFILE_INSIGHT_TESSDATA_DIR` is set and do not start llama.cpp; the E2E runner reads the selected `vision.enabled=false` profile from appsettings. Then run:
 
 ```powershell
 python -m evaluation.phase10_end_to_end_benchmark `
@@ -266,9 +266,9 @@ After the prior phase benchmark JSON files are available locally:
 
 ```powershell
 python -m evaluation.phase10_benchmark `
+  --deployment-profile degraded_ocr_only `
   --ocr-report .\phase4_ocr_benchmark.json `
   --vision-report .\phase10_siglip_zero_shot_vision_benchmark.json `
-  --embedding-report .\phase6_embedding_benchmark.json `
   --insight-report .\phase8_insight_benchmark.json `
   --api-persistence-report .\phase9_api_persistence_benchmark.json `
   --e2e-report .\phase10_end_to_end_benchmark.json `
@@ -289,12 +289,12 @@ This checks compile/import, focused hardening/benchmark/architecture tests, disp
 
 ### Shutdown
 
-Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to the deployment method used. Normal analysis completion/failure cleans its temp scope.
+Stop Uvicorn normally with `Ctrl+C` and stop PostgreSQL according to the deployment method used. The selected degraded profile has no llama.cpp production process. Normal analysis completion/failure cleans its temp scope.
 
 ### Restart/recovery
 
 1. Ensure the prior Uvicorn process is stopped.
-2. Ensure PostgreSQL is reachable and llama.cpp is healthy.
+2. Ensure PostgreSQL is reachable and `PROFILE_INSIGHT_TESSDATA_DIR` points to the selected `tessdata_best` directory.
 3. Start Uvicorn with exactly one worker.
 4. Startup cleanup removes stale temp scopes and changes leftover `pending`/`in_progress` rows to `failed`.
 5. Repeat the OpenAPI smoke check.
@@ -310,11 +310,11 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 ## Production model/config selection status
 
-`UNRESOLVED`
+`SELECTED_DEGRADED_PROFILE`
 
 The target-host generative Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No generative local Vision model/provider configuration is acceptable on the current CPU-only workstation.
 
-The finalization candidate is the non-generative SigLIP2 zero-shot adapter described above. Its first closed-set target-host run established valid runtime evidence, but the holdout-safe rerun exposed the remaining evaluation gap: the current authorized dataset has no TRAIN visual taxonomy labels. The candidate deliberately remains unbound from DI and the active appsettings provider is not changed to any rejected or unverified candidate. OCR is production-selected as Tesseract with official `tessdata_best` for `fas+eng` because it measured better overall and Persian CER/WER on the authorized dataset. Its higher p95 latency versus `tessdata_fast` is accepted for this quality-first Persian deployment profile. Embedding is not in the active HTTP workflow, so its model/semantic threshold are not deployment blockers. Insight policy remains the verified Phase 8 versioned configuration; unavailable product-quality calibration metrics remain explicitly unavailable.
+The finalization SigLIP2 zero-shot adapter is now rejected by the returned holdout-safe evidence and remains unbound from DI. The selected production profile disables Vision extraction with `vision.enabled=false`. OCR is production-selected as Tesseract with official `tessdata_best` for `fas+eng` because it measured better overall and Persian CER/WER on the authorized dataset. Its higher p95 latency versus `tessdata_fast` is accepted for this quality-first Persian deployment profile. Embedding is not in the active HTTP workflow, so its model/semantic threshold are not deployment blockers. Insight policy remains the verified Phase 8 versioned configuration; unavailable product-quality calibration metrics remain explicitly unavailable.
 
 The deterministic derived-holdout benchmark has now been returned. The derived dataset is v`1.1.0` with manifest fingerprint `d4417e50f2436c71ce9e9201646a5e060684377f52fdbabad42df4f487316833`, 6 TRAIN samples and 12 EVAL samples. The TRAIN taxonomy contained 7 labels, but its EVAL coverage was `0.0` for scene, object, activity and topic. SigLIP2 snapshot `75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2` completed all 12 EVAL samples with failure rate `0.0` and deterministic reruns, but measured Precision/Recall/F1 were all `0.0`. The frozen zero-shot candidate is therefore rejected for production quality; its exit code `0` only means the benchmark itself completed successfully.
 

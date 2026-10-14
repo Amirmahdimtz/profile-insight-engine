@@ -32,6 +32,33 @@ def _metric(value: object, reason: str) -> dict[str, object]:
     return {"status": "measured", "value": value, "reason": None}
 
 
+def _degraded_vision_rejection_is_valid(report: dict[str, Any] | None) -> bool:
+    if report is None or report.get("schema_version") != "phase10-siglip-zero-shot-vision-benchmark-v1":
+        return False
+    candidate = report.get("candidate")
+    return bool(
+        isinstance(candidate, dict)
+        and candidate.get("selection_protocol_safe") is True
+        and candidate.get("benchmark_valid") is True
+        and candidate.get("failure_rate") == 0.0
+        and candidate.get("f1") == 0.0
+    )
+
+
+def _ocr_best_evidence_is_valid(report: dict[str, Any] | None) -> bool:
+    if report is None:
+        return False
+    candidates = report.get("candidates")
+    if not isinstance(candidates, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("candidate") == "tessdata_best"
+        and item.get("deterministic_rerun") is True
+        for item in candidates
+    )
+
+
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     reports = {
         "ocr": _load_optional(args.ocr_report, "OCR"),
@@ -50,7 +77,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     e2e = reports["e2e"] or {}
     quality = e2e.get("quality") if isinstance(e2e.get("quality"), dict) else {}
     performance = e2e.get("performance") if isinstance(e2e.get("performance"), dict) else {}
-    required_inputs = ("ocr", "vision", "embedding", "insight", "api_persistence", "e2e", "hardware")
+    deployment_profile = getattr(args, "deployment_profile", "strict_full")
+    if deployment_profile not in {"strict_full", "degraded_ocr_only"}:
+        raise ValueError("unsupported deployment profile")
+    required_inputs = (
+        ("ocr", "vision", "insight", "api_persistence", "e2e", "hardware")
+        if deployment_profile == "degraded_ocr_only"
+        else ("ocr", "vision", "embedding", "insight", "api_persistence", "e2e", "hardware")
+    )
     missing = [name for name in required_inputs if reports[name] is None]
 
     mandatory_metrics = {
@@ -108,12 +142,38 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
 
+    vision_rejection_valid = _degraded_vision_rejection_is_valid(reports["vision"])
+    ocr_selection_valid = _ocr_best_evidence_is_valid(reports["ocr"])
+    e2e_profile = e2e.get("deployment_profile") if isinstance(e2e.get("deployment_profile"), dict) else {}
+    concurrency = e2e.get("concurrency") if isinstance(e2e.get("concurrency"), dict) else {}
+    e2e_profile_valid = (
+        deployment_profile == "degraded_ocr_only"
+        and e2e_profile.get("vision_enabled") is False
+        and performance.get("failure_rate") == 0.0
+        and quality.get("summary_structural_factuality") is True
+        and quality.get("unsupported_claim_rate_post_validation") == 0.0
+        and concurrency.get("failed_requests") == 0
+        and concurrency.get("request_isolation") is True
+    )
+    degraded_acceptance_ready = (
+        deployment_profile == "degraded_ocr_only"
+        and not missing
+        and vision_rejection_valid
+        and ocr_selection_valid
+        and e2e_profile_valid
+    )
+
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
+        "deployment_profile": deployment_profile,
         "metric_scope": METRIC_SCOPE,
         "input_evidence": {
             name: {
-                "status": "available" if report is not None else "missing",
+                "status": (
+                    "not_required"
+                    if deployment_profile == "degraded_ocr_only" and name == "embedding" and report is None
+                    else ("available" if report is not None else "missing")
+                ),
                 "schema_version": report.get("schema_version") if report else None,
             }
             for name, report in reports.items()
@@ -142,19 +202,33 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             ],
         },
         "metrics": mandatory_metrics,
-        "production_selection": {
-            "ocr": "unresolved_requires_phase10_evidence_review",
-            "vision": "unresolved_requires_phase10_evidence_review",
-            "embedding": "unresolved_requires_phase10_evidence_review",
-            "thresholds": "unresolved_requires_phase10_evidence_review",
+        "production_selection": (
+            {
+                "ocr": "tesseract_tessdata_best_fas_eng",
+                "vision": "disabled_rejected_by_holdout_evidence",
+                "embedding": "not_in_active_http_workflow",
+                "thresholds": "phase8_versioned_policy_no_posthoc_tuning",
+            }
+            if deployment_profile == "degraded_ocr_only"
+            else {
+                "ocr": "unresolved_requires_phase10_evidence_review",
+                "vision": "unresolved_requires_phase10_evidence_review",
+                "embedding": "unresolved_requires_phase10_evidence_review",
+                "thresholds": "unresolved_requires_phase10_evidence_review",
+            }
+        ),
+        "selection_evidence": {
+            "ocr_best_evidence_valid": ocr_selection_valid,
+            "vision_rejection_evidence_valid": vision_rejection_valid,
+            "e2e_degraded_profile_valid": e2e_profile_valid,
         },
         "missing_evidence": missing,
-        "acceptance_ready": False,
+        "acceptance_ready": degraded_acceptance_ready,
         "notes": [
-            "This report never promotes a model/provider/config automatically.",
-            "Production selection requires explicit evidence review and a versioned config change after target-hardware benchmark results are accepted.",
+            "This report never promotes a failed Vision candidate as production-capable.",
+            "The degraded_ocr_only profile is an explicit scope decision backed by rejected target-host Vision evidence and versioned vision.enabled=false configuration.",
             "Metrics without valid annotations or measurements remain unavailable rather than estimated.",
-            "Acceptance is fail-closed in this implementation commit; a later evidence-review commit must explicitly finalize production selection and closure.",
+            "Acceptance is fail-closed unless required reports, OCR selection evidence, Vision rejection evidence and the exact degraded E2E profile all validate.",
         ],
     }
 
@@ -168,6 +242,7 @@ def main() -> None:
     parser.add_argument("--api-persistence-report", type=Path)
     parser.add_argument("--e2e-report", type=Path)
     parser.add_argument("--hardware-report", type=Path)
+    parser.add_argument("--deployment-profile", choices=("strict_full", "degraded_ocr_only"), default="strict_full")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     report = build_report(args)
