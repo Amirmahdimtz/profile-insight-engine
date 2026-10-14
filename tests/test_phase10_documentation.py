@@ -47,7 +47,8 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
         self.assertIn("No generative local Vision model/provider configuration is acceptable", text)
         self.assertIn("finalization candidate is now the non-generative SigLIP2 zero-shot adapter", text)
-        self.assertIn("global visual class universe", text)
+        self.assertIn("visual class universe from the TRAIN split only", text)
+        self.assertIn("EVAL labels are never used to construct the candidate taxonomy", text)
         self.assertIn("sample-specific ground-truth mappings are never passed to the provider", text)
         self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
 
