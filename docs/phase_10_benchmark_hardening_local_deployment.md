@@ -186,6 +186,35 @@ if ($LASTEXITCODE -ne 0) { throw "Transformers Vision benchmark failed" }
 
 The report records the resolved Hugging Face snapshot, provider/runtime versions, per-type precision/recall/F1, unsupported-claim rates, p50/p95 latency, failure rate and deterministic reruns. Raw generated model text and raw image bytes are not written to the benchmark report.
 
+### Deterministic Phase 10 holdout preparation
+
+The original authorized dataset contains 18 EVAL samples and no TRAIN split. To avoid inventing a product taxonomy or copying all EVAL answers into the candidate vocabulary, Phase 10 now derives a new versioned holdout manifest from the same authorized images. TRAIN membership is selected without reading labels: samples are ranked by SHA-256 over `dataset_id + sample_id`, the first 6 become TRAIN, and the remaining 12 stay EVAL. The source manifest is never modified.
+
+This is a precommitted evaluation protocol, not model tuning. The candidate model, threshold and hypothesis template must remain unchanged after the split is created.
+
+```powershell
+$DatasetRoot = "E:\phase2-real-dataset"
+$HoldoutManifest = "$DatasetRoot\manifest.phase10-holdout.json"
+$HoldoutReport = ".\phase10_holdout_dataset.json"
+
+python -m evaluation.prepare_phase10_holdout `
+  --manifest "$DatasetRoot\manifest.json" `
+  --dataset-root "$DatasetRoot" `
+  --dataset-version "1.1.0" `
+  --train-count 6 `
+  --expected-source-manifest-fingerprint "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc" `
+  --expected-dataset-content-fingerprint "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e" `
+  --output-manifest $HoldoutManifest `
+  --output-report $HoldoutReport
+
+if ($LASTEXITCODE -ne 0) { throw "Phase 10 holdout preparation failed" }
+
+$Holdout = Get-Content $HoldoutReport | ConvertFrom-Json
+$Holdout | ConvertTo-Json -Depth 8
+```
+
+Expected invariants: `train_sample_count=6`, `eval_sample_count=12`, a non-zero `train_visual_taxonomy_total`, unchanged dataset-content fingerprint, and a new derived manifest fingerprint. The generated report contains only sample IDs and annotation-derived taxonomy metadata; it contains no raw image bytes.
+
 ### SigLIP2 zero-shot Vision finalization benchmark
 
 This is the final local/offline Vision candidate under the current CPU-only constraint. It uses the existing `google/siglip2-base-patch16-224` model through Transformers zero-shot image classification semantics. The versioned manifest supplies the visual class universe from the TRAIN split only; EVAL labels are never used to construct the candidate taxonomy and sample-specific ground-truth mappings are never passed to the provider.
@@ -198,22 +227,30 @@ If the SigLIP2 checkpoint is not yet cached, acquire it once while network acces
 python -c "from transformers import AutoModel, AutoProcessor; m='google/siglip2-base-patch16-224'; AutoProcessor.from_pretrained(m, revision='main'); AutoModel.from_pretrained(m, revision='main'); print('SigLIP2 zero-shot cache ready')"
 ```
 
-Then disconnect/network-disable if required and run the real target-host benchmark:
+After the deterministic holdout manifest has been prepared, disconnect/network-disable if required and run the real target-host benchmark without changing the candidate configuration:
 
 ```powershell
 $DatasetRoot = "E:\phase2-real-dataset"
+$HoldoutManifest = "$DatasetRoot\manifest.phase10-holdout.json"
+$Holdout = Get-Content .\phase10_holdout_dataset.json | ConvertFrom-Json
 
 python -m evaluation.siglip_zero_shot_vision_benchmark `
-  --manifest "$DatasetRoot\manifest.json" `
+  --manifest $HoldoutManifest `
   --dataset-root "$DatasetRoot" `
   --iterations 2 `
   --determinism-sample-count 3 `
-  --expected-manifest-fingerprint "06fcf3e196d3f3d4fea9d284fa162c0d59b14a85aa662beb2bd34d42db0a15bc" `
-  --expected-dataset-content-fingerprint "5ac729a000b6d0170ea74d7ac1ed688a472771c02ca27ca2c59664c105fb7d8e" `
+  --expected-manifest-fingerprint $Holdout.derived_manifest_fingerprint `
+  --expected-dataset-content-fingerprint $Holdout.dataset_content_fingerprint `
   --output .\phase10_siglip_zero_shot_vision_benchmark.json
 
-if ($LASTEXITCODE -ne 0) { throw "SigLIP2 zero-shot Vision benchmark failed" }
+$VisionExitCode = $LASTEXITCODE
+if (Test-Path .\phase10_siglip_zero_shot_vision_benchmark.json) {
+  Get-Content .\phase10_siglip_zero_shot_vision_benchmark.json
+}
+Write-Host "Vision benchmark exit code: $VisionExitCode"
 ```
+
+Do not tune `minimum_score`, the hypothesis template, TRAIN count or taxonomy after seeing this holdout result. Return the report even if the candidate quality is insufficient.
 
 The candidate benchmark fails before model loading if the TRAIN split contains no visual taxonomy labels, and fails closed if any evaluation image has a runtime failure. A zero exit code means the complete holdout-safe benchmark produced reliable metrics; it does not automatically promote the candidate. The report includes the resolved model snapshot, TRAIN-derived taxonomy and taxonomy fingerprint, EVAL taxonomy-coverage diagnostics, configured threshold, Precision/Recall/F1, unsupported-claim rates, score diagnostics, p50/p95 latency, failure rate and deterministic reruns. Raw image bytes are never written to the report.
 
@@ -280,7 +317,7 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 - Embedding offline load failure: pre-acquire the exact model/revision, then rerun offline.
 - DB failure: verify the environment URL, PostgreSQL readiness and Alembic head.
 - Recovery-created `failed` rows: they were unfinished in the previous single-worker process lifetime and are intentionally not resumed.
-- `training split must contain at least one visual taxonomy label`: stop the Vision benchmark. This means the authorized dataset is valid for Phase 2 but insufficient for leakage-free zero-shot model selection. Add authorized TRAIN visual annotations or provide an independent versioned product taxonomy; do not copy EVAL labels into the candidate vocabulary.
+- `training split must contain at least one visual taxonomy label`: run the deterministic Phase 10 holdout preparation first. If the derived TRAIN split still contains no visual labels, stop and return the holdout report; do not copy EVAL labels manually or alter the split after seeing results.
 
 ## Production model/config selection status
 
@@ -290,11 +327,11 @@ The target-host generative Vision evidence has been reviewed. The current Transf
 
 The finalization candidate is the non-generative SigLIP2 zero-shot adapter described above. Its first closed-set target-host run established valid runtime evidence, but the holdout-safe rerun exposed the remaining evaluation gap: the current authorized dataset has no TRAIN visual taxonomy labels. The candidate deliberately remains unbound from DI and the active appsettings provider is not changed to any rejected or unverified candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
 
-Production Vision selection now requires an independent candidate vocabulary before another quality run is meaningful. The acceptable sources are authorized visual annotations on the TRAIN split or an independent versioned product taxonomy defined outside EVAL ground truth. EVAL labels must not be copied into that taxonomy. Until one of those evidence sources exists, the runtime viability of SigLIP2 remains valid but its production quality cannot be selected without leakage.
+Production Vision selection now uses the deterministic derived-holdout protocol above. The source dataset remains unchanged; six label-blind, hash-ranked samples become TRAIN only in the derived version and the remaining twelve are held out for EVAL. No post-result split, threshold, prompt or taxonomy tuning is allowed. The SigLIP2 runtime viability remains valid; production quality selection now depends on this one frozen holdout result.
 
 ## Acceptance evidence still required
 
-The target hardware profile, rejected generative Vision benchmark, SigLIP2 runtime evidence and full regression evidence are available. The holdout-safe quality benchmark is blocked before model loading because the current dataset contains no TRAIN visual taxonomy labels. Remaining acceptance work is therefore: supply authorized TRAIN visual labels or an independent versioned product taxonomy, rerun the holdout-safe SigLIP2 benchmark once, freeze the selected Vision snapshot/taxonomy/config only if supported by that evidence, then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
+The target hardware profile, rejected generative Vision benchmark, SigLIP2 runtime evidence and full regression evidence are available. The remaining Vision quality step is now executable without new annotation work: create the deterministic derived holdout manifest, run the frozen SigLIP2 candidate once, and review that report. If supported, freeze the exact Vision snapshot/taxonomy/config and then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
 
 ## Verified local implementation evidence
 

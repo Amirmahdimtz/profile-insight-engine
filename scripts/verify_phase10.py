@@ -172,6 +172,7 @@ def main() -> int:
                 "tests.test_transformers_vision_benchmark",
                 "tests.test_siglip_zero_shot_vision_provider",
                 "tests.test_siglip_zero_shot_vision_benchmark",
+                "tests.test_phase10_holdout_dataset",
                 "tests.test_phase9_architecture",
                 "tests.test_phase9_di_discovery",
                 "-v",

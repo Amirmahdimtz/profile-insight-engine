@@ -37,6 +37,7 @@ class Phase10LocalVerificationTests(unittest.TestCase):
             "tests.test_transformers_vision_benchmark",
             "tests.test_siglip_zero_shot_vision_provider",
             "tests.test_siglip_zero_shot_vision_benchmark",
+            "tests.test_phase10_holdout_dataset",
             "alembic",
             "collect_phase10_hardware.py",
             "evaluation.phase10_benchmark",

@@ -26,6 +26,7 @@ class Phase10DocumentationTests(unittest.TestCase):
             "python scripts/verify_phase10.py",
             "python scripts/collect_phase10_hardware.py",
             "python -m evaluation.transformers_vision_benchmark",
+            "python -m evaluation.prepare_phase10_holdout",
             "python -m evaluation.siglip_zero_shot_vision_benchmark",
             "python -m evaluation.phase10_end_to_end_benchmark",
             "python -m evaluation.phase10_benchmark",
@@ -55,6 +56,10 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("independent versioned product taxonomy", text)
         self.assertIn("sample-specific ground-truth mappings are never passed to the provider", text)
         self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
+        self.assertIn("manifest.phase10-holdout.json", text)
+        self.assertIn("--train-count 6", text)
+        self.assertIn("sha256", text.lower())
+        self.assertIn("Do not tune `minimum_score`", text)
 
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):
         text = DOC.read_text(encoding="utf-8")
