@@ -14,11 +14,19 @@ from src.core.profile_analysis.contracts import (
 from src.core.profile_analysis.image_contracts import ImageValidationError, ProcessedImageBatch, RawImageInput
 from src.core.profile_analysis.lifecycle_contracts import CompletedProfileAnalysis, ProfileAnalysisLifecycle
 from src.core.profile_analysis.self_report_contracts import SelfReportedClaim
+from src.core.profile_analysis.personality_contracts import (
+    PersonalityProfile,
+    PersonalityQuestionnaire,
+)
 from src.core.services.profile_analysis.evidence_aggregation_service import EvidenceAggregationService
 from src.core.services.profile_analysis.evidence_extraction_service import EvidenceExtractionService
 from src.core.services.profile_analysis.image_processing_service import ImageProcessingService
 from src.core.services.profile_analysis.insight_generation_service import InsightGenerationService
 from src.core.services.profile_analysis.ocr_evidence_service import OcrEvidenceService
+from src.core.services.profile_analysis.personality_analysis_service import (
+    PersonalityAnalysisService,
+    PersonalityAnalysisValidationError,
+)
 from src.infrastructure.di.inject import inject
 from src.infrastructure.models.profile_analysis import ProfileAnalysisModel
 from src.infrastructure.repositories.profile_analysis.profile_analysis_repository import (
@@ -31,6 +39,7 @@ from src.infrastructure.utils.config_reader import ConfigReader
 
 _PERSISTED_RESULT_SCHEMA_V1 = "phase9-analysis-result-v1"
 _PERSISTED_RESULT_SCHEMA_V2 = "profile-analysis-result-v2"
+_PERSISTED_RESULT_SCHEMA_V3 = "profile-analysis-result-v3"
 _ALLOWED_TRANSITIONS = {
     ProfileAnalysisStatus.PENDING: frozenset({ProfileAnalysisStatus.IN_PROGRESS}),
     ProfileAnalysisStatus.IN_PROGRESS: frozenset(
@@ -79,6 +88,7 @@ class ProfileAnalysisService:
         evidence_aggregation_service: EvidenceAggregationService,
         insight_generation_service: InsightGenerationService,
         profile_analysis_repository: ProfileAnalysisRepository,
+        personality_analysis_service: PersonalityAnalysisService,
         config_reader: ConfigReader,
     ):
         self._image_processing_service = image_processing_service
@@ -87,6 +97,7 @@ class ProfileAnalysisService:
         self._evidence_aggregation_service = evidence_aggregation_service
         self._insight_generation_service = insight_generation_service
         self._profile_analysis_repository = profile_analysis_repository
+        self._personality_analysis_service = personality_analysis_service
         vision_enabled = config_reader.get("vision.enabled")
         if not isinstance(vision_enabled, bool):
             raise ValueError("vision.enabled must be boolean")
@@ -103,8 +114,15 @@ class ProfileAnalysisService:
         request: ProfileAnalysisRequest,
         images: Sequence[RawImageInput],
         self_reported_claims: Sequence[SelfReportedClaim] = (),
+        personality_questionnaire: PersonalityQuestionnaire | None = None,
     ) -> CompletedProfileAnalysis:
         claims = self._validate_self_reported_claims(self_reported_claims)
+        try:
+            personality_profile = self._personality_analysis_service.analyze(
+                personality_questionnaire
+            )
+        except PersonalityAnalysisValidationError as exc:
+            raise ProfileAnalysisInputError(str(exc)) from exc
         try:
             await self._profile_analysis_repository.create_pending_async(
                 request.analysis_id,
@@ -166,6 +184,7 @@ class ProfileAnalysisService:
                 result,
                 insight_result,
                 self_reported_claims=claims,
+                personality_profile=personality_profile,
             )
             persisted = self._sanitize_for_persistence(completed)
             payload = self._serialize_completed(persisted)
@@ -351,18 +370,24 @@ class ProfileAnalysisService:
             insight_policy_version=completed.insight_policy_version,
             summary=completed.summary,
             self_reported_claims=completed.self_reported_claims,
+            personality_profile=completed.personality_profile,
         )
 
     @staticmethod
     def _serialize_completed(completed: CompletedProfileAnalysis) -> dict[str, object]:
         return {
-            "schema_version": _PERSISTED_RESULT_SCHEMA_V2,
+            "schema_version": _PERSISTED_RESULT_SCHEMA_V3,
             "result": json.loads(completed.result.to_json()),
             "insight_policy_version": completed.insight_policy_version,
             "summary": completed.summary,
             "self_reported_claims": [
                 item.to_dict() for item in completed.self_reported_claims
             ],
+            "personality_profile": (
+                completed.personality_profile.to_dict()
+                if completed.personality_profile is not None
+                else None
+            ),
         }
 
     @staticmethod
@@ -377,6 +402,7 @@ class ProfileAnalysisService:
             "summary",
         }
         required_v2 = required_v1 | {"self_reported_claims"}
+        required_v3 = required_v2 | {"personality_profile"}
         try:
             if schema_version == _PERSISTED_RESULT_SCHEMA_V1:
                 if set(payload) != required_v1:
@@ -384,6 +410,7 @@ class ProfileAnalysisService:
                         "persisted analysis result has an invalid schema"
                     )
                 claims: tuple[SelfReportedClaim, ...] = ()
+                personality_profile: PersonalityProfile | None = None
             elif schema_version == _PERSISTED_RESULT_SCHEMA_V2:
                 if set(payload) != required_v2:
                     raise ProfileAnalysisExecutionError(
@@ -398,6 +425,27 @@ class ProfileAnalysisService:
                     SelfReportedClaim.from_dict(item)
                     for item in claims_payload
                 )
+                personality_profile = None
+            elif schema_version == _PERSISTED_RESULT_SCHEMA_V3:
+                if set(payload) != required_v3:
+                    raise ProfileAnalysisExecutionError(
+                        "persisted analysis result has an invalid schema"
+                    )
+                claims_payload = payload["self_reported_claims"]
+                if not isinstance(claims_payload, list):
+                    raise ProfileAnalysisExecutionError(
+                        "persisted self_reported_claims must be a list"
+                    )
+                claims = tuple(
+                    SelfReportedClaim.from_dict(item)
+                    for item in claims_payload
+                )
+                profile_payload = payload["personality_profile"]
+                personality_profile = (
+                    None
+                    if profile_payload is None
+                    else PersonalityProfile.from_dict(profile_payload)
+                )
             else:
                 raise ProfileAnalysisExecutionError(
                     "persisted analysis result schema is unsupported"
@@ -408,6 +456,7 @@ class ProfileAnalysisService:
                 insight_policy_version=payload["insight_policy_version"],
                 summary=payload["summary"],
                 self_reported_claims=claims,
+                personality_profile=personality_profile,
             )
         except (TypeError, ValueError) as exc:
             raise ProfileAnalysisExecutionError("persisted analysis result is invalid") from exc

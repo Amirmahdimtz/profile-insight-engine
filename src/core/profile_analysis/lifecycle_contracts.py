@@ -10,6 +10,7 @@ from src.core.profile_analysis.contracts import (
 )
 from src.core.profile_analysis.insight_contracts import InsightGenerationResult
 from src.core.profile_analysis.self_report_contracts import SelfReportedClaim
+from src.core.profile_analysis.personality_contracts import PersonalityProfile
 
 
 class ProfileAnalysisLifecycleError(ValueError):
@@ -56,6 +57,7 @@ class CompletedProfileAnalysis:
     insight_policy_version: str
     summary: str
     self_reported_claims: tuple[SelfReportedClaim, ...] = ()
+    personality_profile: PersonalityProfile | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, ProfileAnalysisResult):
@@ -88,6 +90,13 @@ class CompletedProfileAnalysis:
             "self_reported_claims",
             tuple(sorted(claims, key=lambda item: item.claim_id)),
         )
+        if (
+            self.personality_profile is not None
+            and not isinstance(self.personality_profile, PersonalityProfile)
+        ):
+            raise ProfileAnalysisLifecycleError(
+                "personality_profile must be a PersonalityProfile or null"
+            )
 
     @classmethod
     def from_insight_result(
@@ -95,6 +104,7 @@ class CompletedProfileAnalysis:
         result: ProfileAnalysisResult,
         insight_result: InsightGenerationResult,
         self_reported_claims: tuple[SelfReportedClaim, ...] = (),
+        personality_profile: PersonalityProfile | None = None,
     ) -> "CompletedProfileAnalysis":
         if not isinstance(insight_result, InsightGenerationResult):
             raise ContractValidationError("insight_result must be an InsightGenerationResult")
@@ -103,4 +113,5 @@ class CompletedProfileAnalysis:
             insight_policy_version=insight_result.policy_version,
             summary=insight_result.summary,
             self_reported_claims=self_reported_claims,
+            personality_profile=personality_profile,
         )

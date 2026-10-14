@@ -8,6 +8,7 @@ from src.application.profile_analysis.dtos.profile_analysis_dto import (
     ProfileAnalysisResultDto,
     ProfileAnalysisStatusDto,
 )
+from src.core.profile_analysis.contracts import ContractValidationError
 from src.core.profile_analysis.image_contracts import ImageValidationError, RawImageInput
 from src.core.services.profile_analysis.profile_analysis_service import (
     ProfileAnalysisAlreadyExistsError,
@@ -94,10 +95,20 @@ class ProfileAnalysisController:
                     ) from exc
 
             try:
+                try:
+                    request = payload.to_core()
+                    self_reported_claims = payload.to_self_reported_claims()
+                    personality_questionnaire = payload.to_personality_questionnaire()
+                except ContractValidationError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
                 result = await self._profile_analysis_service.create_async(
-                    payload.to_core(),
+                    request,
                     tuple(raw_images),
-                    payload.to_self_reported_claims(),
+                    self_reported_claims,
+                    personality_questionnaire,
                 )
             except ProfileAnalysisAlreadyExistsError as exc:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

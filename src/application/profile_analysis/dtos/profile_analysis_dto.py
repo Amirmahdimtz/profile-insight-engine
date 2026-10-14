@@ -11,6 +11,12 @@ from src.core.profile_analysis.self_report_contracts import (
     SelfReportedClaimCategory,
     SelfReportedSourceType,
 )
+from src.core.profile_analysis.personality_contracts import (
+    BigFiveTrait,
+    PersonalityProfile,
+    PersonalityQuestionnaire,
+    PersonalityQuestionnaireItemResponse,
+)
 
 
 class SelfReportedClaimInputDto(BaseModel):
@@ -52,12 +58,78 @@ class SelfReportedClaimInputDto(BaseModel):
         )
 
 
+class PersonalityQuestionnaireItemInputDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=1)
+    trait: BigFiveTrait
+    response_value: float
+    reverse_scored: bool = False
+
+    @field_validator("item_id")
+    @classmethod
+    def validate_item_id(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("personality questionnaire item_id must be trimmed")
+        return value
+
+    def to_core(self) -> PersonalityQuestionnaireItemResponse:
+        return PersonalityQuestionnaireItemResponse(
+            item_id=self.item_id,
+            trait=self.trait,
+            response_value=self.response_value,
+            reverse_scored=self.reverse_scored,
+        )
+
+
+class PersonalityQuestionnaireInputDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: str = Field(min_length=1)
+    instrument_version: str = Field(min_length=1)
+    scale_min: float
+    scale_max: float
+    responses: list[PersonalityQuestionnaireItemInputDto] = Field(min_length=1)
+    consent_confirmed: bool
+    basis: Literal["explicit_self_report_questionnaire"] = (
+        "explicit_self_report_questionnaire"
+    )
+
+    @field_validator("instrument_id", "instrument_version")
+    @classmethod
+    def validate_trimmed_text(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("personality questionnaire text fields must be trimmed")
+        return value
+
+    @field_validator("consent_confirmed")
+    @classmethod
+    def validate_consent(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError(
+                "personality questionnaire requires consent_confirmed=true"
+            )
+        return value
+
+    def to_core(self) -> PersonalityQuestionnaire:
+        return PersonalityQuestionnaire(
+            instrument_id=self.instrument_id,
+            instrument_version=self.instrument_version,
+            scale_min=self.scale_min,
+            scale_max=self.scale_max,
+            responses=tuple(item.to_core() for item in self.responses),
+            consent_confirmed=self.consent_confirmed,
+            basis=self.basis,
+        )
+
+
 class CreateProfileAnalysisDto(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     analysis_id: str = Field(min_length=1)
     image_ids: list[str] = Field(min_length=1)
     self_reported_claims: list[SelfReportedClaimInputDto] = Field(default_factory=list)
+    personality_questionnaire: PersonalityQuestionnaireInputDto | None = None
 
     @field_validator("analysis_id")
     @classmethod
@@ -86,6 +158,11 @@ class CreateProfileAnalysisDto(BaseModel):
 
     def to_self_reported_claims(self) -> tuple[SelfReportedClaim, ...]:
         return tuple(item.to_core() for item in self.self_reported_claims)
+
+    def to_personality_questionnaire(self) -> PersonalityQuestionnaire | None:
+        if self.personality_questionnaire is None:
+            return None
+        return self.personality_questionnaire.to_core()
 
 
 class EvidenceDto(BaseModel):
@@ -148,6 +225,29 @@ class SelfReportedClaimDto(BaseModel):
     basis: Literal["explicit_self_report"]
 
 
+class PersonalityTraitScoreDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trait: BigFiveTrait
+    normalized_score: float
+    raw_mean: float
+    item_count: int
+    supporting_item_ids: list[str]
+    explanation: str
+
+
+class PersonalityProfileDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: str
+    instrument_version: str
+    model: str
+    source: str
+    traits: list[PersonalityTraitScoreDto]
+    summary: str
+    disclaimer: str
+
+
 class ProfileAnalysisStatusDto(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -173,6 +273,7 @@ class ProfileAnalysisResultDto(BaseModel):
     themes: list[ThemeDto]
     insights: list[ProfileInsightDto]
     self_reported_claims: list[SelfReportedClaimDto]
+    personality_profile: PersonalityProfileDto | None
     insight_policy_version: str
     summary: str
 
@@ -182,6 +283,11 @@ class ProfileAnalysisResultDto(BaseModel):
         payload["self_reported_claims"] = [
             item.to_dict() for item in value.self_reported_claims
         ]
+        payload["personality_profile"] = (
+            value.personality_profile.to_dict()
+            if value.personality_profile is not None
+            else None
+        )
         payload["insight_policy_version"] = value.insight_policy_version
         payload["summary"] = value.summary
         return cls.model_validate(payload)
