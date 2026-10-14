@@ -32,7 +32,7 @@ class Phase10DocumentationTests(unittest.TestCase):
             "python -m evaluation.phase10_benchmark",
             "python -m alembic -c src/infrastructure/alembic.ini upgrade head",
             "--workers 1",
-            "--offline",
+            "does not start llama.cpp",
             "Restart/recovery",
             "Shutdown",
         ):

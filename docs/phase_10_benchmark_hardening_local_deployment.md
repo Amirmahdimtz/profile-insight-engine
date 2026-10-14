@@ -12,7 +12,7 @@ The production dependency direction remains:
 
 The current HTTP workflow remains:
 
-`multipart input → ImageProcessingService → OCR → Vision → Cross-Image Aggregation → InsightGenerationService → privacy sanitization → PostgreSQL`
+`multipart input → ImageProcessingService → OCR → Vision disabled by selected profile → Cross-Image Aggregation → InsightGenerationService → privacy sanitization → PostgreSQL`
 
 `SemanticThemeService` is intentionally not inserted into the HTTP workflow. Phase 6 requires caller-supplied observable theme labels and the production API still has no benchmarked source for them. Inventing one in Phase 10 would change the product contract.
 
@@ -62,7 +62,7 @@ Phase 8 has deterministic contract evidence and structural summary factuality, b
 
 ## Benchmark contracts
 
-`evaluation.phase10_end_to_end_benchmark` executes the real production service path using the authorized dataset, real configured OCR/Vision providers and PostgreSQL. It uses no fake provider.
+`evaluation.phase10_end_to_end_benchmark` executes the real selected production service path using the authorized dataset, configured Tesseract OCR and PostgreSQL. With `vision.enabled=false`, the workflow does not call `IVisionProvider`; it uses no fake provider and emits no fabricated Vision evidence.
 
 Default workload sizes are `1, 5, 20, 50, 100`. With current `profile_analysis.max_images=50`, the 100-image case is recorded as `expected_rejection_by_config`, not as fabricated inference performance.
 
@@ -92,7 +92,7 @@ Existing privacy boundaries remain: raw upload bytes are not persisted; canonica
 
 The selected deployment topology is a local FastAPI process, PostgreSQL and Tesseract OCR with Vision explicitly disabled by configuration. The rejected llama.cpp and Transformers Vision adapters remain in Infrastructure for benchmark/history and future reevaluation but are not required to run the selected production profile. The separately benchmarked Embedding runtime is not in the active HTTP workflow. Core/Application do not depend on GGUF, Safetensors, PyTorch, Outlines or ONNX details.
 
-No new application Docker/Compose topology is introduced because the current target is a Windows workstation with an external loopback llama.cpp runtime; containerizing the API would change that verified topology without evidence. Docker is used only for reproducible PostgreSQL verification.
+No new application Docker/Compose topology is introduced because the selected target remains a local Windows workstation running the API directly. The degraded production profile has no llama.cpp runtime dependency. Docker is used only for reproducible PostgreSQL verification.
 
 ## Operational runbook
 
@@ -144,7 +144,7 @@ Invoke-RestMethod http://127.0.0.1:5000/openapi.json | Select-Object -ExpandProp
 python scripts/collect_phase10_hardware.py --output phase10_hardware_profile.json
 ```
 
-If `llama-server` is not on PATH, use `--llama-server-executable` with its local executable path.
+The hardware collector may report llama.cpp details when a local executable is available, but llama.cpp is not a prerequisite for the selected production profile.
 
 ### Transformers Vision candidate benchmark
 
@@ -258,7 +258,7 @@ python -m evaluation.phase10_end_to_end_benchmark `
   --output phase10_end_to_end_benchmark.json
 ```
 
-Slow/time-out behavior from the current Vision candidate is valid evidence and must be returned rather than hidden. The Vision benchmark also waits for llama.cpp slots to become idle after a failed/timed-out request before advancing to the next sample, so cancellation cleanup and queue time cannot contaminate later sample measurements.
+Rejected Vision timeout/failure behavior remains preserved in the historical candidate benchmark reports. The selected E2E production run does not invoke Vision because `vision.enabled=false`; its latency and failure metrics therefore measure the exact degraded production profile being handed off.
 
 ### Final evidence report
 
