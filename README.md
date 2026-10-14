@@ -2,8 +2,8 @@
 
 Evidence-first profile image analysis service built with FastAPI, PostgreSQL, deterministic image preprocessing, Tesseract OCR, cross-image aggregation, and explainable evidence-backed insights.
 
-> **Current status:** COMPLETE / PROJECT ACCEPTED / SELF-REPORT EXTENSION VERIFIED / READY FOR BACKEND-DEVOPS HANDOFF  
-> **Verified main:** `dc4f4a8a85dc664ec905d7f98de01b95c83b2642`  
+> **Accepted baseline:** COMPLETE / PROJECT ACCEPTED / SELF-REPORT EXTENSION VERIFIED at `4dca608041c7a5986b6b0764dd88fb5bf13a454d`  
+> **Current main:** PERSONALITY ANALYSIS ENGINE IMPLEMENTED / AWAITING LOCAL VERIFICATION  
 > **Accepted deployment profile:** `degraded_ocr_only`  
 > **Production Vision:** disabled by benchmark evidence  
 > **Production OCR:** Tesseract + `tessdata_best` for Persian/English  
@@ -470,6 +470,9 @@ before process startup to load `appsettings.development.yaml`.
 | `profile_analysis.max_images` | 50 |
 | `profile_analysis.max_image_size_mb` | 12 MB per image |
 | `profile_analysis.max_image_pixels` | 40,000,000 |
+| `profile_analysis.max_self_reported_claims` | 50 |
+| `profile_analysis.max_self_reported_claim_chars` | 256 |
+| `profile_analysis.max_personality_questionnaire_items` | 100 |
 | `image.max_dimension` | 2048 |
 | `image.allowed_mime_types` | JPEG, PNG, WebP |
 | `ocr.provider` | Tesseract |
@@ -556,7 +559,22 @@ The JSON contract is:
       "consent_confirmed": true,
       "basis": "explicit_self_report"
     }
-  ]
+  ],
+  "personality_questionnaire": {
+    "instrument_id": "authorized-big-five-form",
+    "instrument_version": "1.0",
+    "scale_min": 1,
+    "scale_max": 5,
+    "responses": [
+      {"item_id": "o-1", "trait": "openness", "response_value": 5},
+      {"item_id": "c-1", "trait": "conscientiousness", "response_value": 4},
+      {"item_id": "e-1", "trait": "extraversion", "response_value": 3},
+      {"item_id": "a-1", "trait": "agreeableness", "response_value": 4},
+      {"item_id": "n-1", "trait": "neuroticism", "response_value": 2, "reverse_scored": true}
+    ],
+    "consent_confirmed": true,
+    "basis": "explicit_self_report_questionnaire"
+  }
 }
 ```
 
@@ -574,6 +592,11 @@ Rules:
 - allowed sources: `questionnaire`, `bio`, `post`, `direct_statement`, `other`;
 - these claims must be explicit statements from the person and must never be inferred from images, OCR context, symbols, topics, or appearance;
 - raw questionnaire/bio/post text is not accepted by this contract; only the structured claim and provenance are persisted.
+- `personality_questionnaire` is optional and must contain explicit self-report answers with consent;
+- the personality engine implements deterministic Big Five scoring only; questionnaire items, wording, trait mapping, reverse-scoring flags, licensing, norms, and psychometric validity come from the caller's authorized instrument;
+- all five traits must have at least one supplied item: `openness`, `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism`;
+- submitted response values must be inside the declared `scale_min..scale_max`;
+- raw questionnaire responses are used transiently for scoring and are not persisted in the completed result.
 
 #### curl example
 
@@ -663,6 +686,24 @@ The result DTO contains:
   "themes": [],
   "insights": [],
   "self_reported_claims": [],
+  "personality_profile": {
+    "instrument_id": "authorized-big-five-form",
+    "instrument_version": "1.0",
+    "model": "big_five_self_report_scoring_v1",
+    "source": "explicit_self_report_questionnaire",
+    "traits": [
+      {
+        "trait": "openness",
+        "normalized_score": 1.0,
+        "scored_mean": 5.0,
+        "item_count": 1,
+        "supporting_item_ids": ["o-1"],
+        "explanation": "..."
+      }
+    ],
+    "summary": "Self-reported Big Five scores: ...",
+    "disclaimer": "Scores describe explicit self-report questionnaire responses ..."
+  },
   "insight_policy_version": "phase8-candidate-v1",
   "summary": "No supported insights met the configured evidence policy."
 }
@@ -797,6 +838,12 @@ Optional self-reported claims are a separate, explicit-consent channel. They may
 The service persists only the structured claim fields and provenance. It does not accept or persist the raw questionnaire, bio, or post text used by the caller to construct the claim.
 
 These claims are never merged into image-derived `insights` or the automatic `summary`.
+
+### Personality questionnaire privacy
+
+The optional personality questionnaire is processed transiently. Raw per-item response values are not persisted in the completed analysis payload.
+
+The persisted `personality_profile` contains only derived Big Five trait scores, instrument ID/version, supporting item IDs, deterministic explanations, and a disclaimer. The image-derived `summary` remains unchanged and does not incorporate personality scores.
 
 ---
 
@@ -1107,6 +1154,32 @@ The API supports an optional structured self-report channel for explicitly state
 This channel does **not** infer those properties. The caller must obtain an explicit statement and consent from the person, assign a supported category, and send the structured claim with provenance. The server keeps this data separate from image-derived insights.
 
 This is the supported path for sensitive/internal profile attributes. Inferring the same attributes from face, clothing, symbols, OCR context, or other image content remains prohibited by the product contract.
+
+---
+
+## Self-reported personality analysis
+
+The optional Personality Analysis Engine produces deterministic **Big Five** scores from an explicit-consent questionnaire supplied by the caller.
+
+The engine does not ship questionnaire wording or copyrighted/proprietary items. Instead, the caller supplies an authorized instrument definition through item metadata:
+
+- item ID;
+- Big Five trait mapping;
+- response value;
+- whether the item is reverse-scored;
+- declared response scale;
+- instrument ID and version.
+
+Scoring is deterministic:
+
+1. reverse-scored responses are transformed with `scale_min + scale_max - response_value`;
+2. adjusted responses are averaged per trait;
+3. each trait mean is normalized to `[0, 1]`;
+4. the result records supporting item IDs and a deterministic explanation.
+
+No `high/medium/low` label, diagnostic label, or psychometric confidence is fabricated. The engine does not validate the scientific quality, licensing, norms, or interpretation rules of the caller-supplied instrument.
+
+The output is separate from image-derived `insights` and cannot be produced from face, clothing, OCR, Vision, or other image evidence.
 
 ---
 
