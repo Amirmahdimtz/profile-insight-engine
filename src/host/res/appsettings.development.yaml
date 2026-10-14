@@ -2,6 +2,8 @@ profile_analysis:
   max_images: 50
   max_image_size_mb: 12
   max_image_pixels: 40000000
+  max_self_reported_claims: 50
+  max_self_reported_claim_chars: 256
 image:
   max_dimension: 2048
   allowed_mime_types:
