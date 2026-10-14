@@ -217,10 +217,16 @@ class ProfileAnalysisService:
                 "self_reported_claims must have unique claim_id values"
             )
         for item in items:
-            if len(item.value) > self._max_self_reported_claim_chars:
-                raise ProfileAnalysisInputError(
-                    f"self-reported claim '{item.claim_id}' exceeds configured text limit"
-                )
+            for field_name, field_value in (
+                ("claim_id", item.claim_id),
+                ("value", item.value),
+                ("source_id", item.source_id),
+            ):
+                if len(field_value) > self._max_self_reported_claim_chars:
+                    raise ProfileAnalysisInputError(
+                        f"self-reported claim '{item.claim_id}' field '{field_name}' "
+                        "exceeds configured text limit"
+                    )
         return tuple(sorted(items, key=lambda item: item.claim_id))
 
     async def recover_interrupted_async(self) -> int:
