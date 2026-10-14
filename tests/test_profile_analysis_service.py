@@ -11,9 +11,15 @@ from src.core.profile_analysis.contracts import (
 )
 from src.core.profile_analysis.image_contracts import CanonicalImage, ProcessedImageBatch, RawImageInput
 from src.core.profile_analysis.insight_contracts import InsightGenerationResult
+from src.core.profile_analysis.self_report_contracts import (
+    SelfReportedClaim,
+    SelfReportedClaimCategory,
+    SelfReportedSourceType,
+)
 from src.core.services.profile_analysis.profile_analysis_service import (
     ProfileAnalysisAlreadyExistsError,
     ProfileAnalysisExecutionError,
+    ProfileAnalysisInputError,
     ProfileAnalysisService,
     ProfileAnalysisTransitionError,
 )
@@ -30,6 +36,15 @@ class _FakeConfigReader:
         if key != "vision.enabled":
             raise AssertionError(f"unexpected config key: {key}")
         return self.vision_enabled
+
+    def get_positive_int(self, key):
+        values = {
+            "profile_analysis.max_self_reported_claims": 5,
+            "profile_analysis.max_self_reported_claim_chars": 64,
+        }
+        if key not in values:
+            raise AssertionError(f"unexpected config key: {key}")
+        return values[key]
 
 
 class _FakeImageProcessingService:
@@ -191,11 +206,79 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         persisted = repository.transitions[-1][2]
         self.assertIsNotNone(persisted)
-        self.assertEqual(persisted["schema_version"], "phase9-analysis-result-v1")
+        self.assertEqual(persisted["schema_version"], "profile-analysis-result-v2")
         self.assertIsNone(result.result.images[0].evidence[0].value)
         self.assertNotIn("raw_text", result.result.images[0].evidence[0].metadata)
         restored = await service.get_result_async("analysis-1")
         self.assertEqual(restored, result)
+
+    async def test_self_reported_claims_are_separate_persisted_and_restored(self):
+        repository = _FakeRepository()
+        service = ProfileAnalysisService(
+            _FakeImageProcessingService(),
+            _FakeOcrService(),
+            _FakeVisionService(),
+            _FakeAggregationService(),
+            _FakeInsightService(),
+            repository,
+            _FakeConfigReader(True),
+        )
+        claim = SelfReportedClaim(
+            claim_id="claim-1",
+            category=SelfReportedClaimCategory.RELIGION,
+            value="Muslim",
+            source_id="questionnaire-q1",
+            source_type=SelfReportedSourceType.QUESTIONNAIRE,
+            consent_confirmed=True,
+        )
+
+        result = await service.create_async(
+            self._request(),
+            self._images(),
+            (claim,),
+        )
+
+        self.assertEqual(result.self_reported_claims, (claim,))
+        persisted = repository.entity.result_payload
+        self.assertEqual(
+            persisted["self_reported_claims"][0]["basis"],
+            "explicit_self_report",
+        )
+        self.assertNotIn("self_reported_claims", persisted["result"])
+        restored = await service.get_result_async("analysis-1")
+        self.assertEqual(restored.self_reported_claims, (claim,))
+
+    async def test_self_reported_claim_limits_fail_before_repository_write(self):
+        repository = _FakeRepository()
+        service = ProfileAnalysisService(
+            _FakeImageProcessingService(),
+            _FakeOcrService(),
+            _FakeVisionService(),
+            _FakeAggregationService(),
+            _FakeInsightService(),
+            repository,
+            _FakeConfigReader(True),
+        )
+        oversized = SelfReportedClaim(
+            claim_id="claim-1",
+            category=SelfReportedClaimCategory.PERSONALITY,
+            value="x" * 65,
+            source_id="bio-1",
+            source_type=SelfReportedSourceType.BIO,
+            consent_confirmed=True,
+        )
+
+        with self.assertRaisesRegex(
+            ProfileAnalysisInputError,
+            "exceeds configured text limit",
+        ):
+            await service.create_async(
+                self._request(),
+                self._images(),
+                (oversized,),
+            )
+
+        self.assertIsNone(repository.entity)
 
     async def test_execution_failure_marks_analysis_failed_without_partial_result(self):
         repository = _FakeRepository()

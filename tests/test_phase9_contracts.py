@@ -12,6 +12,11 @@ from src.core.profile_analysis.contracts import (
     ProfileAnalysisStatus,
     ProfileInsight,
 )
+from src.core.profile_analysis.self_report_contracts import (
+    SelfReportedClaim,
+    SelfReportedClaimCategory,
+    SelfReportedSourceType,
+)
 from src.core.profile_analysis.lifecycle_contracts import (
     CompletedProfileAnalysis,
     ProfileAnalysisLifecycle,
@@ -100,6 +105,45 @@ class Phase9ContractTests(unittest.TestCase):
         self.assertEqual(payload1, payload2)
         restored = ProfileAnalysisService._deserialize_completed(payload1)
         self.assertEqual(restored, completed)
+
+    def test_persisted_snapshot_round_trip_keeps_explicit_self_report_separate(self):
+        completed = self._completed_fixture()
+        claim = SelfReportedClaim(
+            claim_id="claim-1",
+            category=SelfReportedClaimCategory.POLITICAL_ORIENTATION,
+            value="self-described political view",
+            source_id="questionnaire-q4",
+            source_type=SelfReportedSourceType.QUESTIONNAIRE,
+            consent_confirmed=True,
+        )
+        completed = CompletedProfileAnalysis(
+            result=completed.result,
+            insight_policy_version=completed.insight_policy_version,
+            summary=completed.summary,
+            self_reported_claims=(claim,),
+        )
+
+        payload = ProfileAnalysisService._serialize_completed(completed)
+        self.assertEqual(payload["schema_version"], "profile-analysis-result-v2")
+        self.assertEqual(
+            payload["self_reported_claims"][0]["basis"],
+            "explicit_self_report",
+        )
+        restored = ProfileAnalysisService._deserialize_completed(payload)
+        self.assertEqual(restored, completed)
+
+    def test_v1_persisted_snapshot_remains_readable(self):
+        completed = self._completed_fixture()
+        v2 = ProfileAnalysisService._serialize_completed(completed)
+        v1 = {
+            "schema_version": "phase9-analysis-result-v1",
+            "result": v2["result"],
+            "insight_policy_version": v2["insight_policy_version"],
+            "summary": v2["summary"],
+        }
+        restored = ProfileAnalysisService._deserialize_completed(v1)
+        self.assertEqual(restored.result, completed.result)
+        self.assertEqual(restored.self_reported_claims, ())
 
     def test_persisted_snapshot_revalidates_sensitive_inference_boundary(self):
         completed = self._completed_fixture()

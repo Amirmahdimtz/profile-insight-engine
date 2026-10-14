@@ -38,10 +38,10 @@ class _Service:
         self.result_error = None
         self.received = None
 
-    async def create_async(self, request, images):
+    async def create_async(self, request, images, self_reported_claims=()):
         if self.create_error:
             raise self.create_error
-        self.received = (request, images)
+        self.received = (request, images, self_reported_claims)
         return _completed()
 
     async def get_status_async(self, analysis_id):
@@ -118,9 +118,66 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["analysis_id"], "analysis-1")
-        request, images = self.service.received
+        request, images, claims = self.service.received
         self.assertEqual(request.image_ids, ("img-1",))
+        self.assertEqual(claims, ())
         self.assertEqual(images[0].declared_mime_type, "image/png")
+
+    def test_post_accepts_explicit_self_reported_claims_with_consent(self):
+        response = self.client.post(
+            "/api/v1/profile_analysis/",
+            data={
+                "request_json": json.dumps(
+                    {
+                        "analysis_id": "analysis-1",
+                        "image_ids": ["img-1"],
+                        "self_reported_claims": [
+                            {
+                                "claim_id": "claim-1",
+                                "category": "personality",
+                                "value": "introverted",
+                                "source_id": "questionnaire-q2",
+                                "source_type": "questionnaire",
+                                "consent_confirmed": True,
+                                "basis": "explicit_self_report",
+                            }
+                        ],
+                    }
+                )
+            },
+            files={"images": ("image.png", b"x", "image/png")},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        _, _, claims = self.service.received
+        self.assertEqual(len(claims), 1)
+        self.assertEqual(claims[0].category.value, "personality")
+        self.assertEqual(claims[0].basis, "explicit_self_report")
+
+    def test_post_rejects_self_reported_claim_without_consent(self):
+        response = self.client.post(
+            "/api/v1/profile_analysis/",
+            data={
+                "request_json": json.dumps(
+                    {
+                        "analysis_id": "analysis-1",
+                        "image_ids": ["img-1"],
+                        "self_reported_claims": [
+                            {
+                                "claim_id": "claim-1",
+                                "category": "mental_health",
+                                "value": "self-described condition",
+                                "source_id": "questionnaire-q3",
+                                "source_type": "questionnaire",
+                                "consent_confirmed": False,
+                            }
+                        ],
+                    }
+                )
+            },
+            files={"images": ("image.png", b"x", "image/png")},
+        )
+        self.assertEqual(response.status_code, 422)
 
     def test_dto_validation_and_image_count_errors_map_to_422(self):
         duplicate = self.client.post(

@@ -544,6 +544,17 @@ The JSON contract is:
   "image_ids": [
     "img-001",
     "img-002"
+  ],
+  "self_reported_claims": [
+    {
+      "claim_id": "claim-001",
+      "category": "personality",
+      "value": "introverted",
+      "source_id": "questionnaire-q2",
+      "source_type": "questionnaire",
+      "consent_confirmed": true,
+      "basis": "explicit_self_report"
+    }
   ]
 }
 ```
@@ -556,6 +567,12 @@ Rules:
 - uploaded files are associated with image IDs by multipart order;
 - the current maximum is 50 images;
 - an existing `analysis_id` cannot be reused.
+- `self_reported_claims` is optional and stays separate from image-derived `insights`;
+- every self-reported claim requires `consent_confirmed=true`;
+- allowed categories: `religion`, `political_orientation`, `ethnicity`, `mental_health`, `sexual_orientation`, `personality`, `intelligence`, `other_self_description`;
+- allowed sources: `questionnaire`, `bio`, `post`, `direct_statement`, `other`;
+- these claims must be explicit statements from the person and must never be inferred from images, OCR context, symbols, topics, or appearance;
+- raw questionnaire/bio/post text is not accepted by this contract; only the structured claim and provenance are persisted.
 
 #### curl example
 
@@ -644,6 +661,7 @@ The result DTO contains:
   "images": [],
   "themes": [],
   "insights": [],
+  "self_reported_claims": [],
   "insight_policy_version": "phase8-candidate-v1",
   "summary": "No supported insights met the configured evidence policy."
 }
@@ -770,6 +788,14 @@ Production logic must not log:
 ### Final textual insights
 
 Supported final textual-reference insights may be persisted because they are validated product output derived from the evidence graph. This is different from persisting block-level raw OCR text.
+
+### Self-reported sensitive claims
+
+Optional self-reported claims are a separate, explicit-consent channel. They may contain sensitive information because they are supplied directly by the person rather than inferred from images.
+
+The service persists only the structured claim fields and provenance. It does not accept or persist the raw questionnaire, bio, or post text used by the caller to construct the claim.
+
+These claims are never merged into image-derived `insights` or the automatic `summary`.
 
 ---
 
@@ -1070,6 +1096,16 @@ The accepted recovery contract marks interrupted `pending`/`in_progress` rows as
 No, not for the accepted release.
 
 Vision is intentionally disabled and llama.cpp is not a production dependency.
+
+---
+
+## Self-reported profile claims
+
+The API supports an optional structured self-report channel for explicitly stated religion, political orientation, ethnicity, mental-health statements, sexual orientation, personality self-description, intelligence self-description, or other direct self-description.
+
+This channel does **not** infer those properties. The caller must obtain an explicit statement and consent from the person, assign a supported category, and send the structured claim with provenance. The server keeps this data separate from image-derived insights.
+
+This is the supported path for sensitive/internal profile attributes. Inferring the same attributes from face, clothing, symbols, OCR context, or other image content remains prohibited by the product contract.
 
 ---
 
