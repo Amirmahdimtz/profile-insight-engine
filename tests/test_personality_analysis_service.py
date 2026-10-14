@@ -18,9 +18,13 @@ class _Config:
         self.max_items = max_items
 
     def get_positive_int(self, key):
-        if key != "profile_analysis.max_personality_questionnaire_items":
+        values = {
+            "profile_analysis.max_personality_questionnaire_items": self.max_items,
+            "profile_analysis.max_self_reported_claim_chars": 64,
+        }
+        if key not in values:
             raise AssertionError(f"unexpected config key: {key}")
-        return self.max_items
+        return values[key]
 
 
 def _questionnaire():
@@ -144,6 +148,23 @@ class PersonalityAnalysisServiceTests(unittest.TestCase):
 
     def test_none_questionnaire_returns_none(self):
         self.assertIsNone(PersonalityAnalysisService(_Config()).analyze(None))
+
+    def test_configured_text_limit_fails_closed(self):
+        service = PersonalityAnalysisService(_Config())
+        questionnaire = _questionnaire()
+        oversized = PersonalityQuestionnaire(
+            instrument_id="x" * 65,
+            instrument_version=questionnaire.instrument_version,
+            scale_min=questionnaire.scale_min,
+            scale_max=questionnaire.scale_max,
+            responses=questionnaire.responses,
+            consent_confirmed=True,
+        )
+        with self.assertRaisesRegex(
+            PersonalityAnalysisValidationError,
+            "instrument_id exceeds configured text limit",
+        ):
+            service.analyze(oversized)
 
     def test_configured_item_limit_fails_closed(self):
         service = PersonalityAnalysisService(_Config(max_items=5))

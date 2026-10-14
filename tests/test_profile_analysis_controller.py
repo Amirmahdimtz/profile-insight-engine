@@ -229,10 +229,10 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
                                 "item_id": "n-1",
                                 "trait": "neuroticism",
                                 "response_value": 1,
-                                "reverse_scored": true
+                                "reverse_scored": True
                             }
                         ],
-                        "consent_confirmed": true,
+                        "consent_confirmed": True,
                         "basis": "explicit_self_report_questionnaire"
                     },
                     }

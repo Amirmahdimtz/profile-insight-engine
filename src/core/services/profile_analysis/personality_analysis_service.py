@@ -22,6 +22,9 @@ class PersonalityAnalysisService:
         self._max_items = config_reader.get_positive_int(
             "profile_analysis.max_personality_questionnaire_items"
         )
+        self._max_text_chars = config_reader.get_positive_int(
+            "profile_analysis.max_self_reported_claim_chars"
+        )
 
     def analyze(
         self,
@@ -37,6 +40,19 @@ class PersonalityAnalysisService:
             raise PersonalityAnalysisValidationError(
                 "personality questionnaire item count exceeds configured limit"
             )
+        for field_name, field_value in (
+            ("instrument_id", questionnaire.instrument_id),
+            ("instrument_version", questionnaire.instrument_version),
+        ):
+            if len(field_value) > self._max_text_chars:
+                raise PersonalityAnalysisValidationError(
+                    f"personality questionnaire {field_name} exceeds configured text limit"
+                )
+        for item in questionnaire.responses:
+            if len(item.item_id) > self._max_text_chars:
+                raise PersonalityAnalysisValidationError(
+                    "personality questionnaire item_id exceeds configured text limit"
+                )
 
         grouped: dict[BigFiveTrait, list[tuple[str, float]]] = defaultdict(list)
         scale_span = questionnaire.scale_max - questionnaire.scale_min
