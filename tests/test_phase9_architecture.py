@@ -8,6 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONTROLLER = ROOT / "src/application/profile_analysis/profile_analysis_controller.py"
 DTO = ROOT / "src/application/profile_analysis/dtos/profile_analysis_dto.py"
 SERVICE = ROOT / "src/core/services/profile_analysis/profile_analysis_service.py"
+PERSONALITY_SERVICE = ROOT / "src/core/services/profile_analysis/personality_analysis_service.py"
 LIFECYCLE = ROOT / "src/core/profile_analysis/lifecycle_contracts.py"
 REPOSITORY = ROOT / "src/infrastructure/repositories/profile_analysis/profile_analysis_repository.py"
 BASE_REPOSITORY = ROOT / "src/infrastructure/repositories/base/base_repository.py"
@@ -25,6 +26,7 @@ PRODUCTION_FILES = (
     CONTROLLER,
     DTO,
     SERVICE,
+    PERSONALITY_SERVICE,
     LIFECYCLE,
     REPOSITORY,
     BASE_REPOSITORY,
@@ -72,6 +74,7 @@ class Phase9ArchitectureTests(unittest.TestCase):
             "EvidenceExtractionService",
             "EvidenceAggregationService",
             "InsightGenerationService",
+            "PersonalityAnalysisService",
             "ProfileAnalysisRepository",
         ):
             self.assertIn(term, text)
@@ -87,6 +90,7 @@ class Phase9ArchitectureTests(unittest.TestCase):
         for path, class_name in (
             (CONTROLLER, "ProfileAnalysisController"),
             (SERVICE, "ProfileAnalysisService"),
+            (PERSONALITY_SERVICE, "PersonalityAnalysisService"),
             (REPOSITORY, "ProfileAnalysisRepository"),
             (DB_CONTEXT, "PsqlDbContext"),
             (WEB, "WebService"),
@@ -100,7 +104,7 @@ class Phase9ArchitectureTests(unittest.TestCase):
 
     def test_async_service_and_repository_methods_use_async_suffix(self):
         violations = []
-        for path in (SERVICE, REPOSITORY, BASE_REPOSITORY):
+        for path in (SERVICE, PERSONALITY_SERVICE, REPOSITORY, BASE_REPOSITORY):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.AsyncFunctionDef) and not node.name.endswith("_async"):

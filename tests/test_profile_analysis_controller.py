@@ -38,10 +38,21 @@ class _Service:
         self.result_error = None
         self.received = None
 
-    async def create_async(self, request, images, self_reported_claims=()):
+    async def create_async(
+        self,
+        request,
+        images,
+        self_reported_claims=(),
+        personality_questionnaire=None,
+    ):
         if self.create_error:
             raise self.create_error
-        self.received = (request, images, self_reported_claims)
+        self.received = (
+            request,
+            images,
+            self_reported_claims,
+            personality_questionnaire,
+        )
         return _completed()
 
     async def get_status_async(self, analysis_id):
@@ -118,9 +129,10 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["analysis_id"], "analysis-1")
-        request, images, claims = self.service.received
+        request, images, claims, questionnaire = self.service.received
         self.assertEqual(request.image_ids, ("img-1",))
         self.assertEqual(claims, ())
+        self.assertIsNone(questionnaire)
         self.assertEqual(images[0].declared_mime_type, "image/png")
 
     def test_post_accepts_explicit_self_reported_claims_with_consent(self):
@@ -149,7 +161,7 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        _, _, claims = self.service.received
+        _, _, claims, _ = self.service.received
         self.assertEqual(len(claims), 1)
         self.assertEqual(claims[0].category.value, "personality")
         self.assertEqual(claims[0].basis, "explicit_self_report")
@@ -172,6 +184,91 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
                                 "consent_confirmed": False,
                             }
                         ],
+                    }
+                )
+            },
+            files={"images": ("image.png", b"x", "image/png")},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_post_accepts_personality_questionnaire_and_maps_to_core(self):
+        response = self.client.post(
+            "/api/v1/profile_analysis/",
+            data={
+                "request_json": json.dumps(
+                    {
+                        "analysis_id": "analysis-1",
+                        "image_ids": ["img-1"],
+                        "personality_questionnaire": {
+                        "instrument_id": "authorized-form",
+                        "instrument_version": "1",
+                        "scale_min": 1,
+                        "scale_max": 5,
+                        "responses": [
+                            {
+                                "item_id": "o-1",
+                                "trait": "openness",
+                                "response_value": 5
+                            },
+                            {
+                                "item_id": "c-1",
+                                "trait": "conscientiousness",
+                                "response_value": 4
+                            },
+                            {
+                                "item_id": "e-1",
+                                "trait": "extraversion",
+                                "response_value": 3
+                            },
+                            {
+                                "item_id": "a-1",
+                                "trait": "agreeableness",
+                                "response_value": 2
+                            },
+                            {
+                                "item_id": "n-1",
+                                "trait": "neuroticism",
+                                "response_value": 1,
+                                "reverse_scored": true
+                            }
+                        ],
+                        "consent_confirmed": true,
+                        "basis": "explicit_self_report_questionnaire"
+                    },
+                    }
+                )
+            },
+            files={"images": ("image.png", b"x", "image/png")},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        _, _, _, questionnaire = self.service.received
+        self.assertIsNotNone(questionnaire)
+        self.assertEqual(questionnaire.instrument_id, "authorized-form")
+        self.assertEqual(len(questionnaire.responses), 5)
+
+    def test_post_rejects_incomplete_personality_questionnaire(self):
+        response = self.client.post(
+            "/api/v1/profile_analysis/",
+            data={
+                "request_json": json.dumps(
+                    {
+                        "analysis_id": "analysis-1",
+                        "image_ids": ["img-1"],
+                        "personality_questionnaire": {
+                            "instrument_id": "authorized-form",
+                            "instrument_version": "1",
+                            "scale_min": 1,
+                            "scale_max": 5,
+                            "responses": [
+                                {
+                                    "item_id": "o-1",
+                                    "trait": "openness",
+                                    "response_value": 5
+                                }
+                            ],
+                            "consent_confirmed": True
+                        },
                     }
                 )
             },

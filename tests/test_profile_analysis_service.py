@@ -16,6 +16,13 @@ from src.core.profile_analysis.self_report_contracts import (
     SelfReportedClaimCategory,
     SelfReportedSourceType,
 )
+from src.core.profile_analysis.personality_contracts import (
+    BigFiveTrait,
+    PersonalityProfile,
+    PersonalityQuestionnaire,
+    PersonalityQuestionnaireItemResponse,
+    PersonalityTraitScore,
+)
 from src.core.services.profile_analysis.profile_analysis_service import (
     ProfileAnalysisAlreadyExistsError,
     ProfileAnalysisExecutionError,
@@ -151,6 +158,19 @@ class _FakeNoInsightService:
         )
 
 
+class _FakePersonalityAnalysisService:
+    def __init__(self, profile=None, error=None):
+        self.profile = profile
+        self.error = error
+        self.received = None
+
+    def analyze(self, questionnaire):
+        self.received = questionnaire
+        if self.error is not None:
+            raise self.error
+        return self.profile
+
+
 class _FakeRepository:
     def __init__(self, duplicate=False):
         self.duplicate = duplicate
@@ -193,6 +213,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         result = await service.create_async(self._request(), self._images())
@@ -206,7 +227,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         persisted = repository.transitions[-1][2]
         self.assertIsNotNone(persisted)
-        self.assertEqual(persisted["schema_version"], "profile-analysis-result-v2")
+        self.assertEqual(persisted["schema_version"], "profile-analysis-result-v3")
         self.assertIsNone(result.result.images[0].evidence[0].value)
         self.assertNotIn("raw_text", result.result.images[0].evidence[0].metadata)
         restored = await service.get_result_async("analysis-1")
@@ -221,6 +242,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         claim = SelfReportedClaim(
@@ -257,6 +279,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         oversized = SelfReportedClaim(
@@ -280,6 +303,78 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(repository.entity)
 
+    async def test_personality_profile_is_separate_persisted_and_restored(self):
+        repository = _FakeRepository()
+        profile = PersonalityProfile(
+            instrument_id="authorized-form",
+            instrument_version="1",
+            model="big_five_self_report_scoring_v1",
+            source="explicit_self_report_questionnaire",
+            traits=tuple(
+                PersonalityTraitScore(
+                    trait=trait,
+                    normalized_score=0.5,
+                    raw_mean=3.0,
+                    item_count=1,
+                    supporting_item_ids=(f"{trait.value}-1",),
+                    explanation=f"Supported self-report score for {trait.value}.",
+                )
+                for trait in BigFiveTrait
+            ),
+            summary=(
+                "Self-reported Big Five scores: "
+                "openness=0.500000 | conscientiousness=0.500000 | "
+                "extraversion=0.500000 | agreeableness=0.500000 | "
+                "neuroticism=0.500000"
+            ),
+            disclaimer="Self-report score; not image-derived or diagnostic.",
+        )
+        personality_service = _FakePersonalityAnalysisService(profile=profile)
+        service = ProfileAnalysisService(
+            _FakeImageProcessingService(),
+            _FakeOcrService(),
+            _FakeVisionService(),
+            _FakeAggregationService(),
+            _FakeInsightService(),
+            repository,
+            personality_service,
+            _FakeConfigReader(True),
+        )
+        questionnaire = PersonalityQuestionnaire(
+            instrument_id="authorized-form",
+            instrument_version="1",
+            scale_min=1,
+            scale_max=5,
+            responses=tuple(
+                PersonalityQuestionnaireItemResponse(
+                    item_id=f"{trait.value}-1",
+                    trait=trait,
+                    response_value=3,
+                )
+                for trait in BigFiveTrait
+            ),
+            consent_confirmed=True,
+        )
+
+        result = await service.create_async(
+            self._request(),
+            self._images(),
+            (),
+            questionnaire,
+        )
+
+        self.assertIs(personality_service.received, questionnaire)
+        self.assertEqual(result.personality_profile, profile)
+        persisted = repository.entity.result_payload
+        self.assertEqual(persisted["schema_version"], "profile-analysis-result-v3")
+        self.assertEqual(
+            persisted["personality_profile"]["source"],
+            "explicit_self_report_questionnaire",
+        )
+        self.assertNotIn("responses", persisted["personality_profile"])
+        restored = await service.get_result_async("analysis-1")
+        self.assertEqual(restored.personality_profile, profile)
+
     async def test_execution_failure_marks_analysis_failed_without_partial_result(self):
         repository = _FakeRepository()
         image_service = _FakeImageProcessingService()
@@ -290,6 +385,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisExecutionError):
@@ -306,6 +402,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             _FakeRepository(duplicate=True),
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisAlreadyExistsError):
@@ -319,6 +416,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             _FakeRepository(),
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisTransitionError):
@@ -339,6 +437,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeNoInsightService(),
             repository,
+            _FakePersonalityAnalysisService(),
             _FakeConfigReader(False),
         )
 

@@ -17,6 +17,11 @@ from src.core.profile_analysis.self_report_contracts import (
     SelfReportedClaimCategory,
     SelfReportedSourceType,
 )
+from src.core.profile_analysis.personality_contracts import (
+    BigFiveTrait,
+    PersonalityProfile,
+    PersonalityTraitScore,
+)
 from src.core.profile_analysis.lifecycle_contracts import (
     CompletedProfileAnalysis,
     ProfileAnalysisLifecycle,
@@ -124,7 +129,7 @@ class Phase9ContractTests(unittest.TestCase):
         )
 
         payload = ProfileAnalysisService._serialize_completed(completed)
-        self.assertEqual(payload["schema_version"], "profile-analysis-result-v2")
+        self.assertEqual(payload["schema_version"], "profile-analysis-result-v3")
         self.assertEqual(
             payload["self_reported_claims"][0]["basis"],
             "explicit_self_report",
@@ -132,14 +137,68 @@ class Phase9ContractTests(unittest.TestCase):
         restored = ProfileAnalysisService._deserialize_completed(payload)
         self.assertEqual(restored, completed)
 
+    def test_personality_profile_persistence_round_trip_does_not_store_raw_answers(self):
+        completed = self._completed_fixture()
+        profile = PersonalityProfile(
+            instrument_id="authorized-form",
+            instrument_version="1",
+            model="big_five_self_report_scoring_v1",
+            source="explicit_self_report_questionnaire",
+            traits=tuple(
+                PersonalityTraitScore(
+                    trait=trait,
+                    normalized_score=0.5,
+                    raw_mean=3.0,
+                    item_count=1,
+                    supporting_item_ids=(f"{trait.value}-1",),
+                    explanation=f"Supported self-report score for {trait.value}.",
+                )
+                for trait in BigFiveTrait
+            ),
+            summary=(
+                "Self-reported Big Five scores: "
+                "openness=0.500000 | conscientiousness=0.500000 | "
+                "extraversion=0.500000 | agreeableness=0.500000 | "
+                "neuroticism=0.500000"
+            ),
+            disclaimer="Self-report score; not image-derived or diagnostic.",
+        )
+        completed = CompletedProfileAnalysis(
+            result=completed.result,
+            insight_policy_version=completed.insight_policy_version,
+            summary=completed.summary,
+            personality_profile=profile,
+        )
+
+        payload = ProfileAnalysisService._serialize_completed(completed)
+        self.assertEqual(payload["schema_version"], "profile-analysis-result-v3")
+        self.assertNotIn("responses", payload["personality_profile"])
+        restored = ProfileAnalysisService._deserialize_completed(payload)
+        self.assertEqual(restored, completed)
+
+    def test_v2_persisted_snapshot_remains_readable(self):
+        completed = self._completed_fixture()
+        v3 = ProfileAnalysisService._serialize_completed(completed)
+        v2 = {
+            "schema_version": "profile-analysis-result-v2",
+            "result": v3["result"],
+            "insight_policy_version": v3["insight_policy_version"],
+            "summary": v3["summary"],
+            "self_reported_claims": v3["self_reported_claims"],
+        }
+        restored = ProfileAnalysisService._deserialize_completed(v2)
+        self.assertEqual(restored.result, completed.result)
+        self.assertEqual(restored.self_reported_claims, ())
+        self.assertIsNone(restored.personality_profile)
+
     def test_v1_persisted_snapshot_remains_readable(self):
         completed = self._completed_fixture()
-        v2 = ProfileAnalysisService._serialize_completed(completed)
+        v3 = ProfileAnalysisService._serialize_completed(completed)
         v1 = {
             "schema_version": "phase9-analysis-result-v1",
-            "result": v2["result"],
-            "insight_policy_version": v2["insight_policy_version"],
-            "summary": v2["summary"],
+            "result": v3["result"],
+            "insight_policy_version": v3["insight_policy_version"],
+            "summary": v3["summary"],
         }
         restored = ProfileAnalysisService._deserialize_completed(v1)
         self.assertEqual(restored.result, completed.result)
