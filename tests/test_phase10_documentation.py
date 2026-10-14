@@ -46,7 +46,7 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("model snapshot `067788b187b95ebe7b2e040b3e4299e342e5b8fd`", text)
         self.assertIn("current Transformers SmolVLM2-256M candidate is explicitly rejected", text)
         self.assertIn("No generative local Vision model/provider configuration is acceptable", text)
-        self.assertIn("finalization candidate is now the non-generative SigLIP2 zero-shot adapter", text)
+        self.assertIn("The finalization candidate is the non-generative SigLIP2 zero-shot adapter", text)
         self.assertIn("visual class universe from the TRAIN split only", text)
         self.assertIn("EVAL labels are never used to construct the candidate taxonomy", text)
         self.assertIn("current authorized dataset has no TRAIN visual taxonomy labels", text)
