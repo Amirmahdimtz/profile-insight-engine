@@ -38,7 +38,7 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("Do not use `--workers > 1`", text)
         self.assertIn("single 512px image tile", text)
         self.assertIn("Outlines JSON-schema constrained decoding", text)
-        self.assertIn("remains benchmark-only until target-host evidence is reviewed", text)
+        self.assertIn("remains benchmark-only until holdout-safe evidence is reviewed", text)
         self.assertIn("deliberately remains unbound from DI", text)
         self.assertIn("benchmark_valid=true", text)
         self.assertIn("does **not** mean the candidate is production-ready", text)
@@ -49,6 +49,8 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("finalization candidate is now the non-generative SigLIP2 zero-shot adapter", text)
         self.assertIn("visual class universe from the TRAIN split only", text)
         self.assertIn("EVAL labels are never used to construct the candidate taxonomy", text)
+        self.assertIn("current authorized dataset has no TRAIN visual taxonomy labels", text)
+        self.assertIn("independent versioned product taxonomy", text)
         self.assertIn("sample-specific ground-truth mappings are never passed to the provider", text)
         self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
 

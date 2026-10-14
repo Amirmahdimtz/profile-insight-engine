@@ -280,6 +280,7 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 - Embedding offline load failure: pre-acquire the exact model/revision, then rerun offline.
 - DB failure: verify the environment URL, PostgreSQL readiness and Alembic head.
 - Recovery-created `failed` rows: they were unfinished in the previous single-worker process lifetime and are intentionally not resumed.
+- `training split must contain at least one visual taxonomy label`: stop the Vision benchmark. This means the authorized dataset is valid for Phase 2 but insufficient for leakage-free zero-shot model selection. Add authorized TRAIN visual annotations or provide an independent versioned product taxonomy; do not copy EVAL labels into the candidate vocabulary.
 
 ## Production model/config selection status
 
@@ -287,13 +288,13 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 The target-host generative Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No generative local Vision model/provider configuration is acceptable on the current CPU-only workstation.
 
-The finalization candidate is now the non-generative SigLIP2 zero-shot adapter described above. It deliberately remains unbound from DI until its full 18-sample target-host report is returned and reviewed. The active appsettings provider is not changed to any rejected or unverified candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
+The finalization candidate is the non-generative SigLIP2 zero-shot adapter described above. Its first closed-set target-host run established valid runtime evidence, but the holdout-safe rerun exposed the remaining evaluation gap: the current authorized dataset has no TRAIN visual taxonomy labels. The candidate deliberately remains unbound from DI and the active appsettings provider is not changed to any rejected or unverified candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
 
-If the SigLIP2 zero-shot benchmark demonstrates complete runtime reliability plus materially better evidence quality than the rejected candidates, its exact resolved snapshot/taxonomy/config can be frozen in the evidence-review commit and then used for final E2E acceptance. If it also fails, Phase 10 cannot be honestly closed without changing hardware, local/offline requirements, or the Vision product contract.
+Production Vision selection now requires an independent candidate vocabulary before another quality run is meaningful. The acceptable sources are authorized visual annotations on the TRAIN split or an independent versioned product taxonomy defined outside EVAL ground truth. EVAL labels must not be copied into that taxonomy. Until one of those evidence sources exists, the runtime viability of SigLIP2 remains valid but its production quality cannot be selected without leakage.
 
 ## Acceptance evidence still required
 
-The target hardware profile, rejected generative Vision benchmark and full regression evidence are available. Remaining acceptance work is intentionally narrow: run/review the SigLIP2 zero-shot Vision benchmark, freeze the selected Vision snapshot/taxonomy/config only if supported by that evidence, then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable insight-level labels remain `unavailable`; they cannot be fabricated to close the phase.
+The target hardware profile, rejected generative Vision benchmark, SigLIP2 runtime evidence and full regression evidence are available. The holdout-safe quality benchmark is blocked before model loading because the current dataset contains no TRAIN visual taxonomy labels. Remaining acceptance work is therefore: supply authorized TRAIN visual labels or an independent versioned product taxonomy, rerun the holdout-safe SigLIP2 benchmark once, freeze the selected Vision snapshot/taxonomy/config only if supported by that evidence, then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
 
 ## Status
 
