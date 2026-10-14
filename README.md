@@ -2,8 +2,8 @@
 
 Evidence-first profile image analysis service built with FastAPI, PostgreSQL, deterministic image preprocessing, Tesseract OCR, cross-image aggregation, and explainable evidence-backed insights.
 
-> **Accepted baseline:** COMPLETE / PROJECT ACCEPTED / READY FOR BACKEND-DEVOPS HANDOFF at `716360ba49d4c84db952dd3da2654e385f9a1036`  
-> **Current main:** POST-ACCEPTANCE SELF-REPORT EXTENSION IMPLEMENTED / AWAITING LOCAL VERIFICATION  
+> **Current status:** COMPLETE / PROJECT ACCEPTED / SELF-REPORT EXTENSION VERIFIED / READY FOR BACKEND-DEVOPS HANDOFF  
+> **Verified main:** `dc4f4a8a85dc664ec905d7f98de01b95c83b2642`  
 > **Accepted deployment profile:** `degraded_ocr_only`  
 > **Production Vision:** disabled by benchmark evidence  
 > **Production OCR:** Tesseract + `tessdata_best` for Persian/English  

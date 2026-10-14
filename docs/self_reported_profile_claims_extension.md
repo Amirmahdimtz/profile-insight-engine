@@ -2,9 +2,9 @@
 
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`VERIFIED / ACCEPTED / READY_FOR_BACKEND_DEVOPS_HANDOFF`
 
-This additive post-acceptance extension introduces an explicit-consent self-report channel. It does not change the image-inference safety boundary and it does not enable production Vision.
+This additive post-acceptance extension introduces an explicit-consent self-report channel. It does not change the image-inference safety boundary and it does not enable production Vision. Local verification completed successfully against commit `dc4f4a8a85dc664ec905d7f98de01b95c83b2642`.
 
 ## Goal
 
@@ -77,7 +77,23 @@ profile_analysis:
 
 These limits are enforced in Core before a repository row is created.
 
-## Local verification
+## Verified local evidence
+
+Verification on the accepted Windows target completed successfully against `dc4f4a8a85dc664ec905d7f98de01b95c83b2642`:
+
+- compile/import check: passed;
+- targeted self-report/API/service/persistence/architecture/DI suite: 39 tests passed;
+- focused Phase 10 suite: 63 tests passed;
+- PostgreSQL recovery regression: 5 tests passed;
+- full repository regression: 373 tests passed;
+- Alembic upgrade: passed;
+- Alembic metadata check: passed with no new upgrade operations;
+- tracked repository state: clean;
+- official verifier: `PHASE 10 IMPLEMENTATION VERIFICATION PASSED`.
+
+The verifier's internal final benchmark JSON remains a deliberate fail-closed scaffold unless real benchmark artifacts are supplied. This does not invalidate the already accepted degraded production profile or the locally verified self-report extension.
+
+## Re-verification commands
 
 Run from repository root:
 
@@ -101,4 +117,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-The extension becomes verified only after the local output is returned and all tests are green.
+The extension is verified. Re-run the commands above after any future change to the self-report contract, persistence schema, API DTOs, or lifecycle behavior.
