@@ -97,6 +97,7 @@ class ProfileAnalysisController:
                 result = await self._profile_analysis_service.create_async(
                     payload.to_core(),
                     tuple(raw_images),
+                    payload.to_self_reported_claims(),
                 )
             except ProfileAnalysisAlreadyExistsError as exc:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

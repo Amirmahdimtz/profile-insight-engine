@@ -13,6 +13,7 @@ from src.core.profile_analysis.contracts import (
 )
 from src.core.profile_analysis.image_contracts import ImageValidationError, ProcessedImageBatch, RawImageInput
 from src.core.profile_analysis.lifecycle_contracts import CompletedProfileAnalysis, ProfileAnalysisLifecycle
+from src.core.profile_analysis.self_report_contracts import SelfReportedClaim
 from src.core.services.profile_analysis.evidence_aggregation_service import EvidenceAggregationService
 from src.core.services.profile_analysis.evidence_extraction_service import EvidenceExtractionService
 from src.core.services.profile_analysis.image_processing_service import ImageProcessingService
@@ -28,7 +29,8 @@ from src.infrastructure.repositories.profile_analysis.profile_analysis_repositor
 from src.infrastructure.utils.config_reader import ConfigReader
 
 
-_PERSISTED_RESULT_SCHEMA = "phase9-analysis-result-v1"
+_PERSISTED_RESULT_SCHEMA_V1 = "phase9-analysis-result-v1"
+_PERSISTED_RESULT_SCHEMA_V2 = "profile-analysis-result-v2"
 _ALLOWED_TRANSITIONS = {
     ProfileAnalysisStatus.PENDING: frozenset({ProfileAnalysisStatus.IN_PROGRESS}),
     ProfileAnalysisStatus.IN_PROGRESS: frozenset(
@@ -89,12 +91,20 @@ class ProfileAnalysisService:
         if not isinstance(vision_enabled, bool):
             raise ValueError("vision.enabled must be boolean")
         self._vision_enabled = vision_enabled
+        self._max_self_reported_claims = config_reader.get_positive_int(
+            "profile_analysis.max_self_reported_claims"
+        )
+        self._max_self_reported_claim_chars = config_reader.get_positive_int(
+            "profile_analysis.max_self_reported_claim_chars"
+        )
 
     async def create_async(
         self,
         request: ProfileAnalysisRequest,
         images: Sequence[RawImageInput],
+        self_reported_claims: Sequence[SelfReportedClaim] = (),
     ) -> CompletedProfileAnalysis:
+        claims = self._validate_self_reported_claims(self_reported_claims)
         try:
             await self._profile_analysis_repository.create_pending_async(
                 request.analysis_id,
@@ -152,7 +162,11 @@ class ProfileAnalysisService:
                 themes=(),
                 insights=insight_result.insights,
             )
-            completed = CompletedProfileAnalysis.from_insight_result(result, insight_result)
+            completed = CompletedProfileAnalysis.from_insight_result(
+                result,
+                insight_result,
+                self_reported_claims=claims,
+            )
             persisted = self._sanitize_for_persistence(completed)
             payload = self._serialize_completed(persisted)
             await self._image_processing_service.release_async(batch)
@@ -176,6 +190,38 @@ class ProfileAnalysisService:
                     await self._image_processing_service.release_async(batch)
                 except Exception:
                     pass
+
+    def _validate_self_reported_claims(
+        self,
+        claims: Sequence[SelfReportedClaim],
+    ) -> tuple[SelfReportedClaim, ...]:
+        if (
+            isinstance(claims, (str, bytes, bytearray))
+            or not isinstance(claims, Sequence)
+        ):
+            raise ProfileAnalysisInputError(
+                "self_reported_claims must be a sequence"
+            )
+        items = tuple(claims)
+        if len(items) > self._max_self_reported_claims:
+            raise ProfileAnalysisInputError(
+                "self-reported claim count exceeds configured limit"
+            )
+        if not all(isinstance(item, SelfReportedClaim) for item in items):
+            raise ProfileAnalysisInputError(
+                "self_reported_claims must contain SelfReportedClaim values"
+            )
+        claim_ids = [item.claim_id for item in items]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ProfileAnalysisInputError(
+                "self_reported_claims must have unique claim_id values"
+            )
+        for item in items:
+            if len(item.value) > self._max_self_reported_claim_chars:
+                raise ProfileAnalysisInputError(
+                    f"self-reported claim '{item.claim_id}' exceeds configured text limit"
+                )
+        return tuple(sorted(items, key=lambda item: item.claim_id))
 
     async def recover_interrupted_async(self) -> int:
         return await self._profile_analysis_repository.fail_interrupted_async()
@@ -298,32 +344,64 @@ class ProfileAnalysisService:
             result=sanitized_result,
             insight_policy_version=completed.insight_policy_version,
             summary=completed.summary,
+            self_reported_claims=completed.self_reported_claims,
         )
 
     @staticmethod
     def _serialize_completed(completed: CompletedProfileAnalysis) -> dict[str, object]:
         return {
-            "schema_version": _PERSISTED_RESULT_SCHEMA,
+            "schema_version": _PERSISTED_RESULT_SCHEMA_V2,
             "result": json.loads(completed.result.to_json()),
             "insight_policy_version": completed.insight_policy_version,
             "summary": completed.summary,
+            "self_reported_claims": [
+                item.to_dict() for item in completed.self_reported_claims
+            ],
         }
 
     @staticmethod
     def _deserialize_completed(payload: object) -> CompletedProfileAnalysis:
         if not isinstance(payload, Mapping):
             raise ProfileAnalysisExecutionError("persisted analysis result must be an object")
-        required = {"schema_version", "result", "insight_policy_version", "summary"}
-        if set(payload) != required:
-            raise ProfileAnalysisExecutionError("persisted analysis result has an invalid schema")
-        if payload["schema_version"] != _PERSISTED_RESULT_SCHEMA:
-            raise ProfileAnalysisExecutionError("persisted analysis result schema is unsupported")
+        schema_version = payload.get("schema_version")
+        required_v1 = {
+            "schema_version",
+            "result",
+            "insight_policy_version",
+            "summary",
+        }
+        required_v2 = required_v1 | {"self_reported_claims"}
         try:
+            if schema_version == _PERSISTED_RESULT_SCHEMA_V1:
+                if set(payload) != required_v1:
+                    raise ProfileAnalysisExecutionError(
+                        "persisted analysis result has an invalid schema"
+                    )
+                claims: tuple[SelfReportedClaim, ...] = ()
+            elif schema_version == _PERSISTED_RESULT_SCHEMA_V2:
+                if set(payload) != required_v2:
+                    raise ProfileAnalysisExecutionError(
+                        "persisted analysis result has an invalid schema"
+                    )
+                claims_payload = payload["self_reported_claims"]
+                if not isinstance(claims_payload, list):
+                    raise ProfileAnalysisExecutionError(
+                        "persisted self_reported_claims must be a list"
+                    )
+                claims = tuple(
+                    SelfReportedClaim.from_dict(item)
+                    for item in claims_payload
+                )
+            else:
+                raise ProfileAnalysisExecutionError(
+                    "persisted analysis result schema is unsupported"
+                )
             result = ProfileAnalysisResult.from_dict(payload["result"])
             return CompletedProfileAnalysis(
                 result=result,
                 insight_policy_version=payload["insight_policy_version"],
                 summary=payload["summary"],
+                self_reported_claims=claims,
             )
         except (TypeError, ValueError) as exc:
             raise ProfileAnalysisExecutionError("persisted analysis result is invalid") from exc

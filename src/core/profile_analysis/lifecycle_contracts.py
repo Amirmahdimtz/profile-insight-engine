@@ -9,6 +9,7 @@ from src.core.profile_analysis.contracts import (
     ProfileAnalysisStatus,
 )
 from src.core.profile_analysis.insight_contracts import InsightGenerationResult
+from src.core.profile_analysis.self_report_contracts import SelfReportedClaim
 
 
 class ProfileAnalysisLifecycleError(ValueError):
@@ -54,6 +55,7 @@ class CompletedProfileAnalysis:
     result: ProfileAnalysisResult
     insight_policy_version: str
     summary: str
+    self_reported_claims: tuple[SelfReportedClaim, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, ProfileAnalysisResult):
@@ -71,12 +73,28 @@ class CompletedProfileAnalysis:
                 "summary must be derived exactly from the completed result insights"
             )
         object.__setattr__(self, "summary", summary)
+        claims = tuple(self.self_reported_claims)
+        if not all(isinstance(item, SelfReportedClaim) for item in claims):
+            raise ProfileAnalysisLifecycleError(
+                "self_reported_claims must contain SelfReportedClaim values"
+            )
+        claim_ids = [item.claim_id for item in claims]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ProfileAnalysisLifecycleError(
+                "self_reported_claims must have unique claim_id values"
+            )
+        object.__setattr__(
+            self,
+            "self_reported_claims",
+            tuple(sorted(claims, key=lambda item: item.claim_id)),
+        )
 
     @classmethod
     def from_insight_result(
         cls,
         result: ProfileAnalysisResult,
         insight_result: InsightGenerationResult,
+        self_reported_claims: tuple[SelfReportedClaim, ...] = (),
     ) -> "CompletedProfileAnalysis":
         if not isinstance(insight_result, InsightGenerationResult):
             raise ContractValidationError("insight_result must be an InsightGenerationResult")
@@ -84,4 +102,5 @@ class CompletedProfileAnalysis:
             result=result,
             insight_policy_version=insight_result.policy_version,
             summary=insight_result.summary,
+            self_reported_claims=self_reported_claims,
         )
