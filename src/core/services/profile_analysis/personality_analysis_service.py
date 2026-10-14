@@ -70,16 +70,16 @@ class PersonalityAnalysisService:
         trait_scores: list[PersonalityTraitScore] = []
         for trait in BigFiveTrait:
             items = grouped[trait]
-            raw_mean = sum(value for _, value in items) / len(items)
+            scored_mean = sum(value for _, value in items) / len(items)
             normalized = (
-                raw_mean - questionnaire.scale_min
+                scored_mean - questionnaire.scale_min
             ) / scale_span
             item_ids = tuple(sorted(item_id for item_id, _ in items))
             trait_scores.append(
                 PersonalityTraitScore(
                     trait=trait,
                     normalized_score=round(normalized, 6),
-                    raw_mean=round(raw_mean, 6),
+                    scored_mean=round(scored_mean, 6),
                     item_count=len(items),
                     supporting_item_ids=item_ids,
                     explanation=(

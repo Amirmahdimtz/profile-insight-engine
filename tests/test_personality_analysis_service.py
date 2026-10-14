@@ -123,7 +123,7 @@ class PersonalityAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(first, second)
         scores = {item.trait: item for item in first.traits}
         self.assertEqual(scores[BigFiveTrait.OPENNESS].normalized_score, 1.0)
-        self.assertEqual(scores[BigFiveTrait.OPENNESS].raw_mean, 5.0)
+        self.assertEqual(scores[BigFiveTrait.OPENNESS].scored_mean, 5.0)
         self.assertEqual(
             scores[BigFiveTrait.CONSCIENTIOUSNESS].normalized_score,
             0.5,

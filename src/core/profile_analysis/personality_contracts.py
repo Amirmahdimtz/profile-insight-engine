@@ -170,7 +170,7 @@ class PersonalityQuestionnaire:
 class PersonalityTraitScore:
     trait: BigFiveTrait
     normalized_score: float
-    raw_mean: float
+    scored_mean: float
     item_count: int
     supporting_item_ids: tuple[str, ...]
     explanation: str
@@ -189,10 +189,10 @@ class PersonalityTraitScore:
         object.__setattr__(self, "normalized_score", normalized)
         object.__setattr__(
             self,
-            "raw_mean",
+            "scored_mean",
             _require_finite_number(
-                self.raw_mean,
-                "personality_trait.raw_mean",
+                self.scored_mean,
+                "personality_trait.scored_mean",
             ),
         )
         if isinstance(self.item_count, bool) or not isinstance(self.item_count, int):
@@ -227,7 +227,7 @@ class PersonalityTraitScore:
         return {
             "trait": self.trait.value,
             "normalized_score": self.normalized_score,
-            "raw_mean": self.raw_mean,
+            "scored_mean": self.scored_mean,
             "item_count": self.item_count,
             "supporting_item_ids": list(self.supporting_item_ids),
             "explanation": self.explanation,
@@ -240,7 +240,7 @@ class PersonalityTraitScore:
         required = {
             "trait",
             "normalized_score",
-            "raw_mean",
+            "scored_mean",
             "item_count",
             "supporting_item_ids",
             "explanation",
@@ -266,7 +266,7 @@ class PersonalityTraitScore:
         return cls(
             trait=trait,
             normalized_score=payload["normalized_score"],
-            raw_mean=payload["raw_mean"],
+            scored_mean=payload["scored_mean"],
             item_count=payload["item_count"],
             supporting_item_ids=tuple(item_ids),
             explanation=payload["explanation"],

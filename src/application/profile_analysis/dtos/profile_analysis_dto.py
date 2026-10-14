@@ -230,7 +230,7 @@ class PersonalityTraitScoreDto(BaseModel):
 
     trait: BigFiveTrait
     normalized_score: float
-    raw_mean: float
+    scored_mean: float
     item_count: int
     supporting_item_ids: list[str]
     explanation: str

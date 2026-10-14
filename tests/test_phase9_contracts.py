@@ -148,7 +148,7 @@ class Phase9ContractTests(unittest.TestCase):
                 PersonalityTraitScore(
                     trait=trait,
                     normalized_score=0.5,
-                    raw_mean=3.0,
+                    scored_mean=3.0,
                     item_count=1,
                     supporting_item_ids=(f"{trait.value}-1",),
                     explanation=f"Supported self-report score for {trait.value}.",
