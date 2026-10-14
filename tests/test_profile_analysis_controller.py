@@ -128,7 +128,15 @@ class ProfileAnalysisControllerTests(unittest.TestCase):
             files={"images": ("image.png", b"not-decoded-by-fake-service", "image/png")},
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["analysis_id"], "analysis-1")
+        body = response.json()
+        self.assertEqual(body["analysis_id"], "analysis-1")
+        self.assertEqual(
+            body["combined_profile"]["observable_patterns"],
+            body["insights"],
+        )
+        self.assertIsNone(
+            body["combined_profile"]["self_reported_personality"]
+        )
         request, images, claims, questionnaire = self.service.received
         self.assertEqual(request.image_ids, ("img-1",))
         self.assertEqual(claims, ())

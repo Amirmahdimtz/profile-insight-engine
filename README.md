@@ -3,7 +3,7 @@
 Evidence-first profile image analysis service built with FastAPI, PostgreSQL, deterministic image preprocessing, Tesseract OCR, cross-image aggregation, and explainable evidence-backed insights.
 
 > **Accepted baseline:** COMPLETE / PROJECT ACCEPTED / SELF-REPORT EXTENSION VERIFIED at `4dca608041c7a5986b6b0764dd88fb5bf13a454d`  
-> **Current main:** PERSONALITY ANALYSIS ENGINE IMPLEMENTED / AWAITING LOCAL VERIFICATION  
+> **Current main:** PERSONALITY + COMBINED PROFILE IMPLEMENTED / AWAITING LOCAL VERIFICATION  
 > **Accepted deployment profile:** `degraded_ocr_only`  
 > **Production Vision:** disabled by benchmark evidence  
 > **Production OCR:** Tesseract + `tessdata_best` for Persian/English  
@@ -704,6 +704,13 @@ The result DTO contains:
     "summary": "Self-reported Big Five scores: ...",
     "disclaimer": "Scores describe explicit self-report questionnaire responses ..."
   },
+  "combined_profile": {
+    "observable_patterns": [],
+    "self_reported_personality": {
+      "source": "explicit_self_report_questionnaire",
+      "traits": ["..."]
+    }
+  },
   "insight_policy_version": "phase8-candidate-v1",
   "summary": "No supported insights met the configured evidence policy."
 }
@@ -844,6 +851,15 @@ These claims are never merged into image-derived `insights` or the automatic `su
 The optional personality questionnaire is processed transiently. Raw per-item response values are not persisted in the completed analysis payload.
 
 The persisted `personality_profile` contains only derived Big Five trait scores, instrument ID/version, supporting item IDs, deterministic explanations, and a disclaimer. The image-derived `summary` remains unchanged and does not incorporate personality scores.
+
+### Combined profile response
+
+The result DTO also exposes a `combined_profile` view with two explicitly separated sources:
+
+- `observable_patterns`: the same validated, evidence-backed image-derived `insights` already produced by the Insight Engine;
+- `self_reported_personality`: the same questionnaire-derived `personality_profile`, or `null` when no questionnaire was supplied.
+
+This field is a response projection only. It does not infer personality from images, does not reclassify image evidence into personality traits, and is not redundantly persisted because both source components are already stored in their existing validated locations.
 
 ---
 

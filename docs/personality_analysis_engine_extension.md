@@ -130,6 +130,47 @@ The completed result adds an optional top-level `personality_profile`:
 
 The profile is separate from image-derived `Evidence`, `Theme`, `ProfileInsight`, and the existing automatic image-insight `summary`.
 
+## Combined profile response
+
+The API now exposes an additive top-level `combined_profile` response view:
+
+```json
+{
+  "combined_profile": {
+    "observable_patterns": [
+      {
+        "key": "visible_interest_1",
+        "type": "visible_interest",
+        "label": "Recurring topic-related content: football",
+        "confidence": 0.9,
+        "evidence_count": 3,
+        "image_coverage": 0.6,
+        "supporting_evidence_ids": ["ev-1", "ev-2", "ev-3"],
+        "supporting_image_ids": ["img-1", "img-2", "img-3"],
+        "explanation": "..."
+      }
+    ],
+    "self_reported_personality": {
+      "instrument_id": "authorized-big-five-form",
+      "instrument_version": "1.0",
+      "model": "big_five_self_report_scoring_v1",
+      "source": "explicit_self_report_questionnaire",
+      "traits": ["..."],
+      "summary": "Self-reported Big Five scores: ...",
+      "disclaimer": "..."
+    }
+  }
+}
+```
+
+This is deliberately a projection of already validated outputs:
+
+- `observable_patterns` is exactly the image-derived `insights` list, retaining evidence count, image coverage, confidence, and supporting IDs;
+- `self_reported_personality` is exactly the questionnaire-derived personality profile, or `null` when absent;
+- no image evidence is converted into Big Five traits;
+- no new claim or combined free-text summary is generated;
+- `combined_profile` is not separately persisted, avoiding duplicate state and preserving the existing persistence schema.
+
 ## Persistence and privacy
 
 Raw questionnaire response values are not persisted in the completed result.

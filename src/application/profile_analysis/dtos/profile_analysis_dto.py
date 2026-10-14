@@ -248,6 +248,13 @@ class PersonalityProfileDto(BaseModel):
     disclaimer: str
 
 
+class CombinedProfileDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observable_patterns: list[ProfileInsightDto]
+    self_reported_personality: PersonalityProfileDto | None
+
+
 class ProfileAnalysisStatusDto(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -274,6 +281,7 @@ class ProfileAnalysisResultDto(BaseModel):
     insights: list[ProfileInsightDto]
     self_reported_claims: list[SelfReportedClaimDto]
     personality_profile: PersonalityProfileDto | None
+    combined_profile: CombinedProfileDto
     insight_policy_version: str
     summary: str
 
@@ -283,11 +291,16 @@ class ProfileAnalysisResultDto(BaseModel):
         payload["self_reported_claims"] = [
             item.to_dict() for item in value.self_reported_claims
         ]
-        payload["personality_profile"] = (
+        personality_profile = (
             value.personality_profile.to_dict()
             if value.personality_profile is not None
             else None
         )
+        payload["personality_profile"] = personality_profile
+        payload["combined_profile"] = {
+            "observable_patterns": payload["insights"],
+            "self_reported_personality": personality_profile,
+        }
         payload["insight_policy_version"] = value.insight_policy_version
         payload["summary"] = value.summary
         return cls.model_validate(payload)

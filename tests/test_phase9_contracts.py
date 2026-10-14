@@ -2,7 +2,10 @@ import unittest
 
 from pydantic import ValidationError
 
-from src.application.profile_analysis.dtos.profile_analysis_dto import CreateProfileAnalysisDto
+from src.application.profile_analysis.dtos.profile_analysis_dto import (
+    CreateProfileAnalysisDto,
+    ProfileAnalysisResultDto,
+)
 from src.core.profile_analysis.contracts import (
     Evidence,
     EvidenceType,
@@ -173,6 +176,18 @@ class Phase9ContractTests(unittest.TestCase):
         payload = ProfileAnalysisService._serialize_completed(completed)
         self.assertEqual(payload["schema_version"], "profile-analysis-result-v3")
         self.assertNotIn("responses", payload["personality_profile"])
+        self.assertNotIn("combined_profile", payload)
+
+        response = ProfileAnalysisResultDto.from_core(completed)
+        self.assertEqual(
+            response.combined_profile.observable_patterns,
+            response.insights,
+        )
+        self.assertEqual(
+            response.combined_profile.self_reported_personality,
+            response.personality_profile,
+        )
+
         restored = ProfileAnalysisService._deserialize_completed(payload)
         self.assertEqual(restored, completed)
 
