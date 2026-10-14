@@ -218,7 +218,7 @@ def main() -> int:
         print("\nPHASE 10 IMPLEMENTATION VERIFICATION PASSED", flush=True)
         print(f"Hardware profile: {HARDWARE_OUTPUT}", flush=True)
         print(f"Acceptance report scaffold: {BENCHMARK_OUTPUT}", flush=True)
-        print("Phase 10 implementation/local verification is complete; acceptance remains blocked until required model/end-to-end evidence is supplied.", flush=True)
+        print("Phase 10 implementation/local verification is complete; this verifier emits a fail-closed scaffold only, while project acceptance is determined by the separately aggregated real evidence report.", flush=True)
         return 0
     except VerificationError as exc:
         print(f"\nPHASE 10 IMPLEMENTATION VERIFICATION FAILED: {exc}", file=sys.stderr, flush=True)

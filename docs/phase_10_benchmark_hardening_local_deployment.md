@@ -22,7 +22,7 @@ The current HTTP workflow remains:
 | --- | --- | --- |
 | Full pipeline | `AVAILABLE` | Phase 9 exposes the verified ingestion/OCR/Vision/aggregation/insight/persistence path. |
 | Evaluation dataset | `PARTIAL` | Authorized images are outside the repository. Dataset identity/fingerprints are known, but insight-level correctness annotations are unavailable. |
-| Candidate model configs | `PARTIAL` | OCR, Vision and Embedding candidates exist but none is production-final. |
+| Candidate model configs | `SELECTED` | Degraded production profile is frozen: Tesseract `tessdata_best` for OCR, Vision disabled by rejected holdout evidence, Embedding outside the active HTTP workflow. |
 | Target hardware | `AVAILABLE` | Target-Windows hardware/runtime profile was returned during verified Phase 10 local implementation verification. |
 
 Authorized dataset identity carried forward from prior verified phases:
@@ -320,29 +320,69 @@ The deterministic derived-holdout benchmark has now been returned. The derived d
 
 To finish the deployable project without promoting failed ML evidence, the production deployment profile explicitly disables Vision extraction with `vision.enabled=false`. `ProfileAnalysisService` skips the Vision call and continues with OCR-backed evidence, aggregation and Insights. This produces no fake Vision evidence and removes llama.cpp from the required production runtime. Visual scene/object/activity/topic capability is a documented deferred capability, not silently claimed as available.
 
-## Acceptance evidence still required
+## Final acceptance evidence
 
-The target hardware profile, OCR candidate comparison, rejected generative Vision evidence, rejected holdout-safe SigLIP2 evidence and full regression evidence are available. Vision is now explicitly disabled in the selected deployment profile and Embedding is outside the active HTTP workflow. Remaining acceptance work is limited to verifying this degraded production profile end to end, supplying the already-generated Phase 4/8/9 evidence reports to the final aggregator, checking offline startup/restart, and rerunning the full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
+Target-Windows final verification was completed against commit `01fcf80ade2ffbc701b066281e262d25b1689b11`.
 
-## Verified local implementation evidence
-
-Target-Windows implementation verification was completed against commit `9e8d16192b913eb90fc8b39b392b518b26081034`.
-
-- targeted Phase 10 documentation/local-verifier/SigLIP holdout-safe suite: 13 tests passed;
-- focused Phase 10 suite: 57 tests passed;
+- focused Phase 10 suite: 63 tests passed;
 - PostgreSQL recovery regression: 5 tests passed;
-- full repository regression: 354 tests passed with no failures or errors;
+- full repository regression: 362 tests passed with no failures or errors;
 - Alembic upgrade and metadata drift check: passed;
-- disposable PostgreSQL startup/readiness: passed with runtime password authentication for the host connection;
-- hardware profile: Windows 11, CPython 3.12.10, 8 logical CPU threads, approximately 16 GB RAM, no NVIDIA GPU;
+- tracked repository state was clean;
 - implementation verifier completed with `PHASE 10 IMPLEMENTATION VERIFICATION PASSED`;
-- tracked repository status was clean at verification time;
-- local `HEAD` matched `9e8d16192b913eb90fc8b39b392b518b26081034`.
+- final evidence aggregation used deployment profile `degraded_ocr_only`;
+- `acceptance_ready=true`;
+- `missing_evidence=[]`;
+- OCR selection evidence valid: `true`;
+- Vision rejection evidence valid: `true`;
+- degraded-profile E2E evidence valid: `true`;
+- measured E2E failure rate: `0.0`;
+- measured unsupported-claim rate after validation: `0.0`;
+- structural summary factuality: `true`;
+- measured p50 total latency: approximately `26009 ms`;
+- measured p95 total latency: approximately `89823 ms`;
+- measured throughput: approximately `0.495 images/second`;
+- measured peak service-process RAM: approximately `80.27 MB`.
 
-This closes implementation/local-verification work. It does not close Phase 10 acceptance. The final acceptance scaffold still correctly reports missing OCR, Vision, Embedding, Insight, API/persistence and E2E evidence inputs, and production selections remain unresolved.
+Authorized end-to-end accuracy, insight precision and confidence calibration remain `unavailable` because the supplied dataset does not contain the annotations required to measure those values. They are not estimated or fabricated and are not required by the selected degraded acceptance profile.
+
+The final production selections are frozen as:
+
+- OCR: `tesseract_tessdata_best_fas_eng`;
+- Vision: `disabled_rejected_by_holdout_evidence`;
+- Embedding: `not_in_active_http_workflow`;
+- Insight thresholds: `phase8_versioned_policy_no_posthoc_tuning`.
+
+Generated benchmark JSON/log files are local evidence artifacts and may remain untracked. Production source, configuration, tests and documentation must remain clean and version-controlled.
+
+## Backend/DevOps handoff
+
+The accepted deployment scope is the degraded OCR-backed profile. Do not advertise scene/object/activity/topic Vision capability for this release; `vision.enabled=false` is intentional and evidence-backed.
+
+Required runtime inputs:
+
+- `PROFILE_INSIGHT_DATABASE_URL`: PostgreSQL SQLAlchemy async URL using `postgresql+asyncpg://`;
+- `PROFILE_INSIGHT_TESSDATA_DIR`: directory containing the selected official `tessdata_best` traineddata used by Tesseract for the configured `fas+eng` OCR runtime;
+- Tesseract 5 available on `PATH`;
+- PostgreSQL reachable before application startup.
+
+Deployment sequence from repository root:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m alembic -c src/infrastructure/alembic.ini upgrade head
+python -m alembic -c src/infrastructure/alembic.ini check
+tesseract --version
+tesseract --tessdata-dir "$env:PROFILE_INSIGHT_TESSDATA_DIR" --list-langs
+python -m uvicorn src.host.app:app --host 127.0.0.1 --port 5000 --workers 1
+```
+
+Use exactly one Uvicorn worker because startup recovery ownership is defined for the verified single-worker topology. No llama.cpp, GPU runtime or Embedding service is required for the accepted release. Keep database credentials and machine-specific paths out of repository configuration.
+
+After startup, verify `/openapi.json` and exercise the POST/status/result profile-analysis flow. Database migrations must be applied before serving traffic. Restart behavior intentionally marks interrupted `pending`/`in_progress` analyses as `failed` and removes stale temporary image scopes.
 
 ## Status
 
-`DEGRADED PRODUCTION PROFILE SELECTED / E2E VERIFICATION PENDING`
+`COMPLETE / PROJECT ACCEPTED / READY_FOR_BACKEND_DEVOPS_HANDOFF`
 
-Phase 10 is not yet `COMPLETE / PROJECT ACCEPTED`. Model selection is resolved for the selected degraded profile: OCR uses `tessdata_best`, Vision is disabled because all target-host candidates were rejected by evidence, and Embedding is not in the active HTTP workflow. The remaining blocker is final E2E/deployment evidence for this exact profile.
+Phase 10 is complete for the accepted `degraded_ocr_only` production scope. The repository is ready to be handed to Backend/DevOps for integration and deployment. Vision remains a documented deferred capability and must not be enabled without a new benchmark/evidence-review cycle.

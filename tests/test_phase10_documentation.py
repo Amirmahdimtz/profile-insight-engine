@@ -7,18 +7,24 @@ DOC = ROOT / "docs/phase_10_benchmark_hardening_local_deployment.md"
 
 
 class Phase10DocumentationTests(unittest.TestCase):
-    def test_documentation_records_phase10_gate_and_awaiting_status(self):
+    def test_documentation_records_final_acceptance_and_handoff_status(self):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("594187e15b692944e126c485b7d9c1b4383cce1d", text)
-        self.assertIn("DEGRADED PRODUCTION PROFILE SELECTED / E2E VERIFICATION PENDING", text)
+        self.assertIn("COMPLETE / PROJECT ACCEPTED / READY_FOR_BACKEND_DEVOPS_HANDOFF", text)
         self.assertIn("PHASE 10 IMPLEMENTATION VERIFICATION PASSED", text)
-        self.assertIn("354 tests passed", text)
-        self.assertIn("Phase 10 is not yet `COMPLETE / PROJECT ACCEPTED`", text)
+        self.assertIn("362 tests passed", text)
+        self.assertIn("Phase 10 is complete for the accepted `degraded_ocr_only` production scope", text)
         self.assertIn("Production model/config selection status", text)
         self.assertIn("`SELECTED_DEGRADED_PROFILE`", text)
         self.assertIn("Full pipeline | `AVAILABLE`", text)
         self.assertIn("Evaluation dataset | `PARTIAL`", text)
         self.assertIn("Target hardware | `AVAILABLE`", text)
+        self.assertIn("acceptance_ready=true", text)
+        self.assertIn("missing_evidence=[]", text)
+        self.assertIn("## Backend/DevOps handoff", text)
+        self.assertIn("PROFILE_INSIGHT_DATABASE_URL", text)
+        self.assertIn("PROFILE_INSIGHT_TESSDATA_DIR", text)
+        self.assertIn("No llama.cpp, GPU runtime or Embedding service is required", text)
 
     def test_runbook_is_copy_paste_oriented_and_documents_single_worker_recovery(self):
         text = DOC.read_text(encoding="utf-8")
