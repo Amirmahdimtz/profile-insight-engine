@@ -19,6 +19,9 @@ class Phase10LocalVerificationTests(unittest.TestCase):
         self.assertIn("--untracked-files=no", text)
         self.assertIn("POSTGRES_READINESS_TIMEOUT_SECONDS = 120", text)
         self.assertIn("time.monotonic() + POSTGRES_READINESS_TIMEOUT_SECONDS", text)
+        self.assertIn("secrets.token_hex", text)
+        self.assertIn("POSTGRES_PASSWORD", text)
+        self.assertNotIn("POSTGRES_HOST_AUTH_METHOD=trust", text)
 
     def test_runner_covers_phase10_implementation_checks(self):
         text = RUNNER.read_text(encoding="utf-8")

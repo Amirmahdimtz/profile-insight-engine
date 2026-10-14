@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -118,7 +119,11 @@ def _verify_phase10_report() -> None:
 def main() -> int:
     env = dict(os.environ)
     port = _free_loopback_port()
-    database_url = f"postgresql+asyncpg://{DATABASE_USER}@127.0.0.1:{port}/{DATABASE_NAME}"
+    database_password = secrets.token_hex(16)
+    database_url = (
+        f"postgresql+asyncpg://{DATABASE_USER}:{database_password}"
+        f"@127.0.0.1:{port}/{DATABASE_NAME}"
+    )
     env["PROFILE_INSIGHT_DATABASE_URL"] = database_url
     env["PROFILE_INSIGHT_PHASE9_TEST_DATABASE_URL"] = database_url
     container_started = False
@@ -130,7 +135,7 @@ def main() -> int:
             [
                 "docker", "run", "--rm", "--name", CONTAINER_NAME,
                 "--env", f"POSTGRES_USER={DATABASE_USER}",
-                "--env", "POSTGRES_HOST_AUTH_METHOD=trust",
+                "--env", f"POSTGRES_PASSWORD={database_password}",
                 "--env", f"POSTGRES_DB={DATABASE_NAME}",
                 "--publish", f"127.0.0.1:{port}:5432",
                 "--detach", POSTGRES_IMAGE,
