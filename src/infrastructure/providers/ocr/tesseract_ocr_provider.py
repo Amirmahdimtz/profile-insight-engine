@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,7 @@ class TesseractOcrSettings:
     model_id: str
     config_version: str
     tessdata_dir: str | None = None
+    tessdata_dir_env: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.executable, str) or not self.executable or self.executable != self.executable.strip():
@@ -69,6 +71,15 @@ class TesseractOcrSettings:
         if self.tessdata_dir is not None:
             if not isinstance(self.tessdata_dir, str) or not self.tessdata_dir or self.tessdata_dir != self.tessdata_dir.strip():
                 raise OcrValidationError("ocr.tessdata_dir must be null or a non-empty trimmed string")
+        if self.tessdata_dir_env is not None:
+            if (
+                not isinstance(self.tessdata_dir_env, str)
+                or not self.tessdata_dir_env
+                or self.tessdata_dir_env != self.tessdata_dir_env.strip()
+            ):
+                raise OcrValidationError(
+                    "ocr.tessdata_dir_env must be null or a non-empty trimmed string"
+                )
 
     @classmethod
     def from_config(cls, config_reader: ConfigReader) -> "TesseractOcrSettings":
@@ -84,6 +95,9 @@ class TesseractOcrSettings:
             timeout_seconds=config_reader.get_positive_int("ocr.timeout_seconds"),
             model_id=config_reader.get_non_empty_string("ocr.model_id"),
             config_version=config_reader.get_non_empty_string("ocr.config_version"),
+            tessdata_dir_env=config_reader.get_non_empty_string(
+                "ocr.tessdata_dir_env"
+            ),
         )
 
 
@@ -120,6 +134,16 @@ class TesseractOcrProvider(IOcrProvider):
         )
 
     def _run_tesseract(self, image_path: Path) -> tuple[str, str]:
+        tessdata_dir = self._settings.tessdata_dir
+        if tessdata_dir is None and self._settings.tessdata_dir_env is not None:
+            tessdata_dir = os.environ.get(
+                self._settings.tessdata_dir_env,
+                "",
+            ).strip()
+            if not tessdata_dir:
+                raise OcrProviderError(
+                    "configured OCR tessdata directory environment variable is not set"
+                )
         command = [
             self._settings.executable,
             str(image_path),
@@ -129,8 +153,8 @@ class TesseractOcrProvider(IOcrProvider):
             "--psm",
             str(self._settings.page_segmentation_mode),
         ]
-        if self._settings.tessdata_dir is not None:
-            command.extend(["--tessdata-dir", self._settings.tessdata_dir])
+        if tessdata_dir is not None:
+            command.extend(["--tessdata-dir", tessdata_dir])
         command.extend(["-c", "tessedit_create_tsv=1"])
         try:
             completed = subprocess.run(

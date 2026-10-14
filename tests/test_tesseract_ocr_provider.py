@@ -155,6 +155,58 @@ class TesseractFailureMappingTests(unittest.TestCase):
         self.assertEqual(command[-2:], ["-c", "tessedit_create_tsv=1"])
         self.assertNotEqual(command[-1], "tsv")
 
+    def test_configured_tessdata_env_is_required_and_used(self):
+        settings = TesseractOcrSettings(
+            executable="tesseract",
+            languages=("fas", "eng"),
+            page_segmentation_mode=1,
+            timeout_seconds=30,
+            model_id="tessdata_best-fas-eng",
+            config_version="phase10-ocr-tessdata-best-v1",
+            tessdata_dir_env="PROFILE_INSIGHT_TESSDATA_DIR",
+        )
+        provider = TesseractOcrProvider(
+            config_reader=None,
+            settings=settings,
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(
+                OcrProviderError,
+                "environment variable is not set",
+            ):
+                provider._run_tesseract(Path("canonical.png"))
+
+        tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+        )
+        ocr_completed = subprocess.CompletedProcess(
+            args=["tesseract"],
+            returncode=0,
+            stdout=tsv.encode("utf-8"),
+            stderr=b"",
+        )
+        version_completed = subprocess.CompletedProcess(
+            args=["tesseract", "--version"],
+            returncode=0,
+            stdout=b"tesseract 5.4.0\n",
+            stderr=b"",
+        )
+        with patch.dict(
+            "os.environ",
+            {"PROFILE_INSIGHT_TESSDATA_DIR": r"E:\models\tessdata_best"},
+            clear=True,
+        ), patch(
+            "src.infrastructure.providers.ocr.tesseract_ocr_provider.subprocess.run",
+            side_effect=[ocr_completed, version_completed],
+        ) as run:
+            provider._run_tesseract(Path("canonical.png"))
+
+        command = run.call_args_list[0].args[0]
+        self.assertIn("--tessdata-dir", command)
+        self.assertIn(r"E:\models\tessdata_best", command)
+
+
 
 if __name__ == "__main__":
     unittest.main()

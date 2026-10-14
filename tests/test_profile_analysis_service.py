@@ -22,6 +22,16 @@ from src.infrastructure.repositories.profile_analysis.profile_analysis_repositor
 )
 
 
+class _FakeConfigReader:
+    def __init__(self, vision_enabled=True):
+        self.vision_enabled = vision_enabled
+
+    def get(self, key):
+        if key != "vision.enabled":
+            raise AssertionError(f"unexpected config key: {key}")
+        return self.vision_enabled
+
+
 class _FakeImageProcessingService:
     def __init__(self):
         self.released = False
@@ -73,8 +83,10 @@ class _FakeOcrService:
 class _FakeVisionService:
     def __init__(self, fail=False):
         self.fail = fail
+        self.call_count = 0
 
     async def extract_async(self, image):
+        self.call_count += 1
         if self.fail:
             raise RuntimeError("provider failed")
         evidence = Evidence(
@@ -112,6 +124,15 @@ class _FakeInsightService:
             policy_version="phase8-candidate-v1",
             insights=(insight,),
             summary="Supported insights: Recurring topic-related content: football",
+        )
+
+
+class _FakeNoInsightService:
+    def generate(self, aggregates, evidence):
+        return InsightGenerationResult(
+            policy_version="phase8-candidate-v1",
+            insights=(),
+            summary="No supported insights met the configured evidence policy.",
         )
 
 
@@ -157,6 +178,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakeConfigReader(True),
         )
         result = await service.create_async(self._request(), self._images())
         self.assertTrue(image_service.released)
@@ -185,6 +207,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             repository,
+            _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisExecutionError):
             await service.create_async(self._request(), self._images())
@@ -200,6 +223,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             _FakeRepository(duplicate=True),
+            _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisAlreadyExistsError):
             await service.create_async(self._request(), self._images())
@@ -212,6 +236,7 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
             _FakeAggregationService(),
             _FakeInsightService(),
             _FakeRepository(),
+            _FakeConfigReader(True),
         )
         with self.assertRaises(ProfileAnalysisTransitionError):
             await service._transition_async(
@@ -219,6 +244,40 @@ class ProfileAnalysisServiceTests(unittest.IsolatedAsyncioTestCase):
                 ProfileAnalysisStatus.COMPLETED,
                 ProfileAnalysisStatus.FAILED,
             )
+
+    async def test_disabled_vision_skips_provider_and_completes_with_ocr_only(self):
+        repository = _FakeRepository()
+        image_service = _FakeImageProcessingService()
+        vision_service = _FakeVisionService(fail=True)
+        service = ProfileAnalysisService(
+            image_service,
+            _FakeOcrService(),
+            vision_service,
+            _FakeAggregationService(),
+            _FakeNoInsightService(),
+            repository,
+            _FakeConfigReader(False),
+        )
+
+        result = await service.create_async(
+            self._request(),
+            self._images(),
+        )
+
+        self.assertEqual(vision_service.call_count, 0)
+        self.assertEqual(
+            repository.entity.status,
+            ProfileAnalysisStatus.COMPLETED.value,
+        )
+        self.assertTrue(image_service.released)
+        self.assertEqual(result.result.insights, ())
+        self.assertTrue(
+            all(
+                evidence.type is EvidenceType.OCR_TEXT
+                for image in result.result.images
+                for evidence in image.evidence
+            )
+        )
 
     @staticmethod
     def _request():

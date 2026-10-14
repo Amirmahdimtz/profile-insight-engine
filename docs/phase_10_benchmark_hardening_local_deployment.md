@@ -90,7 +90,7 @@ Existing privacy boundaries remain: raw upload bytes are not persisted; canonica
 
 ## Local deployment configuration
 
-The current production-wired topology is a local FastAPI process, PostgreSQL, Tesseract OCR, local llama.cpp Vision runtime, plus the separately benchmarked Transformers embedding runtime. Phase 10 also contains an explicit, non-DI-bound Transformers Vision candidate used only by the candidate benchmark until evidence review selects a provider. Core/Application do not depend on GGUF, Safetensors, PyTorch, Outlines or ONNX details.
+The selected deployment topology is a local FastAPI process, PostgreSQL and Tesseract OCR with Vision explicitly disabled by configuration. The rejected llama.cpp and Transformers Vision adapters remain in Infrastructure for benchmark/history and future reevaluation but are not required to run the selected production profile. The separately benchmarked Embedding runtime is not in the active HTTP workflow. Core/Application do not depend on GGUF, Safetensors, PyTorch, Outlines or ONNX details.
 
 No new application Docker/Compose topology is introduced because the current target is a Windows workstation with an external loopback llama.cpp runtime; containerizing the API would change that verified topology without evidence. Docker is used only for reproducible PostgreSQL verification.
 
@@ -118,23 +118,12 @@ python -m alembic -c src/infrastructure/alembic.ini check
 
 ### AI runtime startup
 
-Verify Tesseract:
+The selected production profile does not start llama.cpp because `vision.enabled=false`. Verify Tesseract and point the service at the selected `tessdata_best` directory:
 
 ```powershell
+$env:PROFILE_INSIGHT_TESSDATA_DIR = "E:\profile-insight-models\tessdata_best"
 tesseract --version
-tesseract --list-langs
-```
-
-After the candidate model is already acquired locally, start the current candidate runtime offline. This command is candidate evidence, not a production-final selection:
-
-```powershell
-llama-server -hf "ggml-org/Qwen2.5-VL-3B-Instruct-GGUF:Q4_K_M" --offline --host 127.0.0.1 --port 8080 --ctx-size 4096 --parallel 1 --log-disable
-```
-
-In another shell verify llama.cpp readiness:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8080/health
+tesseract --tessdata-dir "$env:PROFILE_INSIGHT_TESSDATA_DIR" --list-langs
 ```
 
 ### Application startup and smoke check
@@ -325,13 +314,15 @@ Stop Uvicorn and llama.cpp normally with `Ctrl+C`; stop PostgreSQL according to 
 
 The target-host generative Vision evidence has been reviewed. The current Transformers SmolVLM2-256M candidate is explicitly rejected because half of the evaluation samples failed structured inference and measured exact-match F1 was `0.0`. Earlier llama.cpp candidates were already rejected by timeout/load evidence. No generative local Vision model/provider configuration is acceptable on the current CPU-only workstation.
 
-The finalization candidate is the non-generative SigLIP2 zero-shot adapter described above. Its first closed-set target-host run established valid runtime evidence, but the holdout-safe rerun exposed the remaining evaluation gap: the current authorized dataset has no TRAIN visual taxonomy labels. The candidate deliberately remains unbound from DI and the active appsettings provider is not changed to any rejected or unverified candidate. No OCR traineddata choice, Embedding model/config, semantic threshold or Insight threshold is production-final yet.
+The finalization candidate is the non-generative SigLIP2 zero-shot adapter described above. Its first closed-set target-host run established valid runtime evidence, but the holdout-safe rerun exposed the remaining evaluation gap: the current authorized dataset has no TRAIN visual taxonomy labels. The candidate deliberately remains unbound from DI and the active appsettings provider is not changed to any rejected or unverified candidate. OCR is production-selected as Tesseract with official `tessdata_best` for `fas+eng` because it measured better overall and Persian CER/WER on the authorized dataset. Its higher p95 latency versus `tessdata_fast` is accepted for this quality-first Persian deployment profile. Embedding is not in the active HTTP workflow, so its model/semantic threshold are not deployment blockers. Insight policy remains the verified Phase 8 versioned configuration; unavailable product-quality calibration metrics remain explicitly unavailable.
 
-Production Vision selection now uses the deterministic derived-holdout protocol above. The source dataset remains unchanged; six label-blind, hash-ranked samples become TRAIN only in the derived version and the remaining twelve are held out for EVAL. No post-result split, threshold, prompt or taxonomy tuning is allowed. The SigLIP2 runtime viability remains valid; production quality selection now depends on this one frozen holdout result.
+The deterministic derived-holdout benchmark has now been returned. The derived dataset is v`1.1.0` with manifest fingerprint `d4417e50f2436c71ce9e9201646a5e060684377f52fdbabad42df4f487316833`, 6 TRAIN samples and 12 EVAL samples. The TRAIN taxonomy contained 7 labels, but its EVAL coverage was `0.0` for scene, object, activity and topic. SigLIP2 snapshot `75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2` completed all 12 EVAL samples with failure rate `0.0` and deterministic reruns, but measured Precision/Recall/F1 were all `0.0`. The frozen zero-shot candidate is therefore rejected for production quality; its exit code `0` only means the benchmark itself completed successfully.
+
+To finish the deployable project without promoting failed ML evidence, the production deployment profile explicitly disables Vision extraction with `vision.enabled=false`. `ProfileAnalysisService` skips the Vision call and continues with OCR-backed evidence, aggregation and Insights. This produces no fake Vision evidence and removes llama.cpp from the required production runtime. Visual scene/object/activity/topic capability is a documented deferred capability, not silently claimed as available.
 
 ## Acceptance evidence still required
 
-The target hardware profile, rejected generative Vision benchmark, SigLIP2 runtime evidence and full regression evidence are available. The remaining Vision quality step is now executable without new annotation work: create the deterministic derived holdout manifest, run the frozen SigLIP2 candidate once, and review that report. If supported, freeze the exact Vision snapshot/taxonomy/config and then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
+The target hardware profile, OCR candidate comparison, rejected generative Vision evidence, rejected holdout-safe SigLIP2 evidence and full regression evidence are available. Vision is now explicitly disabled in the selected deployment profile and Embedding is outside the active HTTP workflow. Remaining acceptance work is limited to verifying this degraded production profile end to end, supplying the already-generated Phase 4/8/9 evidence reports to the final aggregator, checking offline startup/restart, and rerunning the full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
 
 ## Verified local implementation evidence
 
@@ -352,6 +343,6 @@ This closes implementation/local-verification work. It does not close Phase 10 a
 
 ## Status
 
-`IMPLEMENTED / LOCAL VERIFICATION PASSED / ACCEPTANCE BLOCKED`
+`DEGRADED PRODUCTION PROFILE SELECTED / E2E VERIFICATION PENDING`
 
-Phase 10 is not `COMPLETE / PROJECT ACCEPTED`. The remaining blocker is acceptance evidence, led by the missing independent visual taxonomy/TRAIN annotations required for leakage-free Vision quality selection, followed by final provider/config selection and E2E evidence aggregation.
+Phase 10 is not yet `COMPLETE / PROJECT ACCEPTED`. Model selection is resolved for the selected degraded profile: OCR uses `tessdata_best`, Vision is disabled because all target-host candidates were rejected by evidence, and Embedding is not in the active HTTP workflow. The remaining blocker is final E2E/deployment evidence for this exact profile.

@@ -25,6 +25,7 @@ from src.infrastructure.repositories.profile_analysis.profile_analysis_repositor
     ProfileAnalysisRepository,
     ProfileAnalysisTransitionConflictError as RepositoryTransitionConflictError,
 )
+from src.infrastructure.utils.config_reader import ConfigReader
 
 
 _PERSISTED_RESULT_SCHEMA = "phase9-analysis-result-v1"
@@ -76,6 +77,7 @@ class ProfileAnalysisService:
         evidence_aggregation_service: EvidenceAggregationService,
         insight_generation_service: InsightGenerationService,
         profile_analysis_repository: ProfileAnalysisRepository,
+        config_reader: ConfigReader,
     ):
         self._image_processing_service = image_processing_service
         self._ocr_evidence_service = ocr_evidence_service
@@ -83,6 +85,10 @@ class ProfileAnalysisService:
         self._evidence_aggregation_service = evidence_aggregation_service
         self._insight_generation_service = insight_generation_service
         self._profile_analysis_repository = profile_analysis_repository
+        vision_enabled = config_reader.get("vision.enabled")
+        if not isinstance(vision_enabled, bool):
+            raise ValueError("vision.enabled must be boolean")
+        self._vision_enabled = vision_enabled
 
     async def create_async(
         self,
@@ -114,10 +120,13 @@ class ProfileAnalysisService:
             evidence: list[Evidence] = []
             for image in batch.images:
                 ocr_result = await self._ocr_evidence_service.extract_async(image)
-                vision_result = await self._evidence_extraction_service.extract_async(image)
+                vision_evidence: tuple[Evidence, ...] = ()
+                if self._vision_enabled:
+                    vision_result = await self._evidence_extraction_service.extract_async(image)
+                    vision_evidence = vision_result.evidence
                 image_evidence = tuple(
                     sorted(
-                        (*ocr_result.evidence, *vision_result.evidence),
+                        (*ocr_result.evidence, *vision_evidence),
                         key=lambda item: item.id,
                     )
                 )

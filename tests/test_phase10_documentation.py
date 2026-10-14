@@ -58,7 +58,7 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
         self.assertIn("manifest.phase10-holdout.json", text)
         self.assertIn("--train-count 6", text)
-        self.assertIn("sha256", text.lower())
+        self.assertIn("sha-256", text.lower())
         self.assertIn("Do not tune `minimum_score`", text)
 
     def test_documentation_does_not_claim_missing_metrics_or_final_model_selection(self):

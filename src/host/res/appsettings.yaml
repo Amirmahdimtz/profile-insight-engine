@@ -16,9 +16,11 @@ ocr:
     - eng
   page_segmentation_mode: 1
   timeout_seconds: 30
-  model_id: tessdata-default-fas-eng
-  config_version: phase4-ocr-v1
+  model_id: tessdata_best-fas-eng
+  config_version: phase10-ocr-tessdata-best-v1
+  tessdata_dir_env: PROFILE_INSIGHT_TESSDATA_DIR
 vision:
+  enabled: false
   provider: llama_cpp
   base_url: http://127.0.0.1:8080
   runtime_executable: llama-server
