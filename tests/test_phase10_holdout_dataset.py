@@ -150,6 +150,18 @@ class Phase10HoldoutDatasetTests(unittest.TestCase):
         self.assertEqual(report["train_sample_count"], 2)
         self.assertEqual(report["eval_sample_count"], 4)
 
+    def test_derived_manifest_requires_new_dataset_version(self):
+        source = _manifest(_sample(i) for i in range(1, 4))
+        with self.assertRaisesRegex(
+            ValueError,
+            "must differ from source",
+        ):
+            derive_holdout_manifest(
+                source,
+                dataset_version="1.0.0",
+                train_count=1,
+            )
+
     def test_existing_train_split_is_not_reshuffled(self):
         source = _manifest(
             (

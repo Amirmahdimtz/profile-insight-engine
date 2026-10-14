@@ -51,6 +51,10 @@ def derive_holdout_manifest(
         raise ValueError("manifest must be an EvaluationDatasetManifest")
     if isinstance(train_count, bool) or not isinstance(train_count, int):
         raise ValueError("train_count must be an integer")
+    if dataset_version == manifest.dataset_version:
+        raise ValueError(
+            "derived dataset_version must differ from source dataset_version"
+        )
     if train_count <= 0 or train_count >= len(manifest.samples):
         raise ValueError(
             "train_count must leave at least one TRAIN and one EVAL sample"

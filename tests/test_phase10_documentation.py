@@ -53,7 +53,7 @@ class Phase10DocumentationTests(unittest.TestCase):
         self.assertIn("visual class universe from the TRAIN split only", text)
         self.assertIn("EVAL labels are never used to construct the candidate taxonomy", text)
         self.assertIn("current authorized dataset has no TRAIN visual taxonomy labels", text)
-        self.assertIn("independent versioned product taxonomy", text)
+        self.assertIn("deterministic derived-holdout protocol", text)
         self.assertIn("sample-specific ground-truth mappings are never passed to the provider", text)
         self.assertIn("phase10_siglip_zero_shot_vision_benchmark.json", text)
         self.assertIn("manifest.phase10-holdout.json", text)
