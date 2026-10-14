@@ -23,7 +23,7 @@ The current HTTP workflow remains:
 | Full pipeline | `AVAILABLE` | Phase 9 exposes the verified ingestion/OCR/Vision/aggregation/insight/persistence path. |
 | Evaluation dataset | `PARTIAL` | Authorized images are outside the repository. Dataset identity/fingerprints are known, but insight-level correctness annotations are unavailable. |
 | Candidate model configs | `PARTIAL` | OCR, Vision and Embedding candidates exist but none is production-final. |
-| Target hardware | `PARTIAL` | Prior Windows evidence exists; a versioned hardware/runtime profile still must be returned for Phase 10. |
+| Target hardware | `AVAILABLE` | Target-Windows hardware/runtime profile was returned during verified Phase 10 local implementation verification. |
 
 Authorized dataset identity carried forward from prior verified phases:
 
@@ -296,8 +296,25 @@ Production Vision selection now requires an independent candidate vocabulary bef
 
 The target hardware profile, rejected generative Vision benchmark, SigLIP2 runtime evidence and full regression evidence are available. The holdout-safe quality benchmark is blocked before model loading because the current dataset contains no TRAIN visual taxonomy labels. Remaining acceptance work is therefore: supply authorized TRAIN visual labels or an independent versioned product taxonomy, rerun the holdout-safe SigLIP2 benchmark once, freeze the selected Vision snapshot/taxonomy/config only if supported by that evidence, then run the required OCR/Embedding/Insight/API-persistence/E2E evidence aggregation, offline startup/restart checks and final full regression. Metrics requiring unavailable annotations remain `unavailable`; they cannot be fabricated to close the phase.
 
+## Verified local implementation evidence
+
+Target-Windows implementation verification was completed against commit `9e8d16192b913eb90fc8b39b392b518b26081034`.
+
+- targeted Phase 10 documentation/local-verifier/SigLIP holdout-safe suite: 13 tests passed;
+- focused Phase 10 suite: 57 tests passed;
+- PostgreSQL recovery regression: 5 tests passed;
+- full repository regression: 354 tests passed with no failures or errors;
+- Alembic upgrade and metadata drift check: passed;
+- disposable PostgreSQL startup/readiness: passed with runtime password authentication for the host connection;
+- hardware profile: Windows 11, CPython 3.12.10, 8 logical CPU threads, approximately 16 GB RAM, no NVIDIA GPU;
+- implementation verifier completed with `PHASE 10 IMPLEMENTATION VERIFICATION PASSED`;
+- tracked repository status was clean at verification time;
+- local `HEAD` matched `9e8d16192b913eb90fc8b39b392b518b26081034`.
+
+This closes implementation/local-verification work. It does not close Phase 10 acceptance. The final acceptance scaffold still correctly reports missing OCR, Vision, Embedding, Insight, API/persistence and E2E evidence inputs, and production selections remain unresolved.
+
 ## Status
 
-`IMPLEMENTED_AWAITING_LOCAL_VERIFICATION`
+`IMPLEMENTED / LOCAL VERIFICATION PASSED / ACCEPTANCE BLOCKED`
 
-Phase 10 is not `COMPLETE / PROJECT ACCEPTED`. Final selection and closure require the real target-hardware evidence to be returned and reviewed.
+Phase 10 is not `COMPLETE / PROJECT ACCEPTED`. The remaining blocker is acceptance evidence, led by the missing independent visual taxonomy/TRAIN annotations required for leakage-free Vision quality selection, followed by final provider/config selection and E2E evidence aggregation.
