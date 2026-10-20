@@ -91,7 +91,14 @@ chmod 600 .env
 
 Both generated database passwords are hexadecimal so they can be embedded in the SQLAlchemy URL without URL-escaping reserved characters. `POSTGRES_USER`/`POSTGRES_PASSWORD` are the bootstrap/admin credentials used by the migration service; FastAPI uses the separate `APP_DB_USER`/`APP_DB_PASSWORD` role. The init script runs only when PostgreSQL initializes an empty data directory. For an existing database volume, create/review the app role and grants explicitly before switching this stack; do not delete the volume to force initialization. Changing values in `.env` later does not rotate an existing database role; perform role/password rotation through an approved database procedure. Do not commit `.env`, print it in logs, or paste it into issues. Keep the role names simple (letters, digits, and underscores).
 
-Review `.env` and set image references appropriate for the release. The provided image tags are convenient defaults for initial verification, not immutable production pins. Before production rollout, resolve and record approved image digests for the Python base, PostgreSQL, and Nginx images.
+Review `.env` and set image references appropriate for the release. The provided image tags are convenient defaults for initial verification, not immutable production pins. Before production rollout, resolve and record approved image digests for the Python base, PostgreSQL, and Nginx images. Replace `APP_IMAGE_TAG=local` with a release-specific tag derived from the reviewed source revision, then record the locally built application image ID (or the registry digest if the image is published):
+
+```sh
+APP_IMAGE_TAG="$(sed -n 's/^APP_IMAGE_TAG=//p' .env)"
+docker image inspect --format '{{.Id}}' "profile-insight-engine:${APP_IMAGE_TAG}"
+```
+
+The image ID records the exact built artifact on this host; it does not make mutable package repositories reproducible, so retain the source commit and the image ID together.
 
 ### 4.2 Configure the real hostname
 
@@ -251,7 +258,7 @@ Do not treat the stack as production-ready until all applicable gates are satisf
 
 - [ ] A real hostname is configured; the TLS certificate validates externally and renewal is tested.
 - [ ] Secrets are generated, stored, rotated, and backed up according to policy; `.env`, `.htpasswd`, and private key remain outside source control. FastAPI uses the separate application DB role, not the PostgreSQL bootstrap/admin role.
-- [ ] Approved immutable image digests are recorded for the application base, PostgreSQL, and Nginx.
+- [ ] Approved immutable image digests are recorded for the Python base, PostgreSQL, and Nginx; the built application image ID/registry digest is archived with the source commit.
 - [ ] Firewall/security group exposes only intended public ports; app and DB remain private.
 - [ ] Basic Auth is acceptable for the intended audience, or is replaced by an approved identity/API gateway with per-user authorization and quotas. Do not offer an anonymous public API with the current app.
 - [ ] Request limits and timeouts are load/abuse-tested against representative non-sensitive data.
