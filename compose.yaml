@@ -127,6 +127,8 @@ services:
         read_only: true
         bind:
           create_host_path: false
+    tmpfs:
+      - /var/cache/nginx/client_temp:rw,nosuid,nodev,noexec,size=512m,mode=1777
     healthcheck:
       test: ["CMD-SHELL", "nginx -t"]
       interval: 30s
