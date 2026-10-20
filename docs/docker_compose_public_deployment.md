@@ -71,7 +71,7 @@ These paths are ignored by Git. Compose uses long bind-mount syntax with `create
 - Host firewall/security-group rules that permit inbound TCP 80/443 only as intended. Do not publish the app or database ports. Compose binds these ports to IPv4 `0.0.0.0`; do not publish an AAAA record unless IPv6 binding/routing/firewall is separately configured and verified.
 - Enough disk and memory for Python/Tesseract and temporary canonical images. The 100 MiB edge request cap is a conservative initial public-edge policy, not the application's theoretical maximum request size. Apply the organization's at-rest encryption and swap policy to the host, persistent database volume, and backups; tmpfs can use host swap depending on OS configuration.
 
-The examples below use a Linux shell with OpenSSL and GNU sed on a Docker host. Adapt the file/permission commands for Windows PowerShell or a non-GNU host.
+The package targets Linux containers and is intended to run on a Linux Docker host for public deployment. The examples use a Linux shell with OpenSSL and GNU sed. `deploy/preflight.sh` also uses GNU `stat` and `sha256sum`; a Windows Docker Desktop host must run the checks under a compatible WSL/Linux environment or port the permission/key checks before use. Windows-host deployment is not validated.
 
 ## 4. Configure secrets and TLS
 
