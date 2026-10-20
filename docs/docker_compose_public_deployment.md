@@ -68,7 +68,7 @@ These paths are ignored by Git. Compose uses long bind-mount syntax with `create
 - Host firewall/security-group rules that permit inbound TCP 80/443 only as intended. Do not publish the app or database ports.
 - Enough disk and memory for Python/Tesseract and temporary canonical images. The 100 MiB edge request cap is a conservative initial public-edge policy, not the application's theoretical maximum request size.
 
-The examples below use a POSIX shell on a Docker host. Adapt the file/permission commands for Windows PowerShell if Docker is hosted there.
+The examples below use a Linux shell with OpenSSL and GNU sed on a Docker host. Adapt the file/permission commands for Windows PowerShell or a non-GNU host.
 
 ## 4. Configure secrets and TLS
 
@@ -165,7 +165,7 @@ curl --fail --show-error --user 'replace-with-username' \
   https://your-configured-hostname.example/openapi.json
 ```
 
-Replace the hostname and username placeholders with your actual values. Confirm that unauthenticated requests return `401`, HTTP requests redirect to HTTPS, and the HTTPS certificate validates without `-k`/`--insecure`.
+Replace the hostname and username placeholders with your actual values. Confirm that unauthenticated requests return `401`, HTTP requests redirect to HTTPS, and the HTTPS certificate validates without `-k`/`--insecure`. Always send Basic Auth credentials to the `https://` URL directly; do not run a credentialed request against `http://`, because some clients send the Authorization header before following a redirect.
 
 Finally, run a controlled POST/status/result smoke test using a **non-sensitive test image** and a fresh unique `analysis_id`. The API has no DELETE endpoint and analysis IDs cannot be reused. Use the API contract documented in the root README; the edge gate applies Basic Auth to `/api/v1/`, `/docs`, and `/openapi.json` alike.
 
@@ -175,6 +175,7 @@ Initial Nginx values are explicit starting defaults, not benchmark-derived produ
 
 - TLS protocols: TLS 1.2 and TLS 1.3.
 - Maximum body size: `100m` for the whole multipart request. The application allows up to 50 images and 12 MiB per image, so the edge default is intentionally narrower than the theoretical application maximum. Raise it only after memory/disk capacity and abuse testing; do not assume 50 maximum-sized images will fit through this edge policy.
+- The app's `/tmp` tmpfs is capped at 2 GiB. Adjust only after testing decompressed-image working sets and confirming sufficient host memory.
 - Request rate: `1r/s` per source IP with a burst of 2; at most 2 concurrent connections per source IP.
 - Upstream connect timeout: 10 seconds; send/read timeouts: 180 seconds.
 - `Cache-Control: no-store` is added to prevent intermediary/browser caching of profile results.
