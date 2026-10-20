@@ -35,6 +35,7 @@ hostname="$hostnames"
 printf '%s\n' "$hostname" | grep -Eq '^[A-Za-z0-9.-]+$' || fail "replace the example hostname with a valid DNS name"
 [ "$hostname" != "example.com" ] || fail "replace example.com in deploy/nginx/default.conf"
 grep -Fq "return 308 https://${hostname}\$request_uri;" deploy/nginx/default.conf || fail "HTTP redirect hostname must match server_name"
+grep -Fq "if (\$host != ${hostname}) { return 444; }" deploy/nginx/default.conf || fail "HTTPS server must reject unconfigured Host headers"
 
 openssl x509 -in deploy/tls/fullchain.pem -noout -checkend 0 >/dev/null 2>&1 || fail "TLS certificate is expired or unreadable"
 openssl x509 -in deploy/tls/fullchain.pem -noout -checkhost "$hostname" >/dev/null 2>&1 || fail "TLS certificate does not cover $hostname"
