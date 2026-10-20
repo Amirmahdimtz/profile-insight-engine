@@ -70,6 +70,7 @@ class DockerComposeDeploymentTests(unittest.TestCase):
             "limit_conn api_conn_per_ip",
             "client_max_body_size 100m",
             "proxy_pass http://app:8000",
+            "if ($host != example.com) { return 444; }",
             'add_header Cache-Control "no-store" always',
         ):
             with self.subTest(fragment=fragment):
@@ -82,6 +83,7 @@ class DockerComposeDeploymentTests(unittest.TestCase):
             "APP_DB_PASSWORD must be 64 lowercase hex characters",
             "bootstrap/admin and application DB passwords must differ",
             "HTTP redirect hostname must match server_name",
+            "HTTPS server must reject unconfigured Host headers",
             "openssl x509 -in deploy/tls/fullchain.pem -noout -checkhost",
             "TLS certificate and private key do not match",
             "must not be readable by group/other",
