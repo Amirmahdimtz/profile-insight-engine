@@ -1,2 +1,11 @@
 __pycache__/
 *.py[cod]
+
+# Local Compose configuration and credentials
+/.env
+/.env.*
+!/.env.example
+/deploy/secrets/*
+!/deploy/secrets/.gitkeep
+/deploy/tls/*
+!/deploy/tls/.gitkeep
