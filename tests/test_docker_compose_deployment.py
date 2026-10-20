@@ -76,7 +76,7 @@ class DockerComposeDeploymentTests(unittest.TestCase):
             "auth_basic_user_file /etc/nginx/auth/.htpasswd",
             "limit_req zone=api_per_ip",
             "limit_conn api_conn_per_ip",
-            "limit_conn api_conn_global 4",
+            "limit_conn api_conn_global 1",
             "client_body_temp_path /var/cache/nginx/client_temp 1 2;",
             "client_max_body_size 100m",
             "proxy_pass http://app:8000",
