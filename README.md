@@ -1045,6 +1045,10 @@ Before serving traffic:
 - [ ] database credentials are managed outside the repository;
 - [ ] machine-specific model paths are not committed.
 
+### Docker Compose public-edge package
+
+The repository includes a single-host Compose stack with Nginx as the only public entry point. It publishes ports 80/443, keeps the API and PostgreSQL un-published on an internal network, runs migrations before API startup, and uses edge Basic Auth plus TLS. The certificate and `.htpasswd` file must be supplied by the operator. Basic Auth is only a shared gate, not application-level per-user authorization; do not expose this API anonymously. Container/Linux behavior still requires target-host verification. See [`docs/docker_compose_public_deployment.md`](docs/docker_compose_public_deployment.md).
+
 Recommended production command for the accepted topology:
 
 ```powershell
@@ -1077,7 +1081,7 @@ Operational constraints for this release:
 - **The POST operation is synchronous.** There is no task queue, worker service, or automatic retry/resume mechanism. Set client and reverse-proxy timeouts from a real workload test; the historical target-host p95 was about 90 seconds and is not a universal guarantee.
 - **Vision remains disabled** (`vision.enabled: false`). Do not start llama.cpp, provision a GPU, or download a Vision model for this deployment profile.
 - **No embedding service is required** by the active HTTP workflow.
-- The repository does not provide a Dockerfile or Compose deployment manifest. Docker is used by the verification script to run disposable PostgreSQL for tests; this is not a containerized application deployment recipe.
+- The repository now includes a Dockerfile and a single-host Docker Compose deployment baseline. See `docs/docker_compose_public_deployment.md` for the authenticated public-edge topology and its constraints. The Linux/container target is new and requires separate local verification; the historical Windows benchmark does not establish container acceptance.
 - The benchmarked platform is Windows 11 / CPU-only. Linux, containers, multi-instance hosting, and alternate hardware need separate operational verification before they can be treated as supported deployment targets.
 
 ### Required environment and secret handling
@@ -1359,12 +1363,9 @@ Detailed implementation history and contracts are in `docs/`:
 - `docs/phase_8_insight_engine.md`
 - `docs/phase_9_api_persistence_lifecycle.md`
 - `docs/phase_10_benchmark_hardening_local_deployment.md`
+- `docs/docker_compose_public_deployment.md`
 
-For deployment and final production-selection evidence, start with:
-
-```text
-docs/phase_10_benchmark_hardening_local_deployment.md
-```
+For runtime selection and benchmark evidence, start with `docs/phase_10_benchmark_hardening_local_deployment.md`. For the Docker Compose public-edge package, TLS/Basic Auth setup, migrations, backups, and operational checks, use `docs/docker_compose_public_deployment.md`.
 
 ---
 
