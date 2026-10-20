@@ -14,7 +14,8 @@ Public clients
 Nginx reverse proxy
   - externally supplied TLS certificate
   - HTTP Basic Auth gate
-  - per-source-IP request/connection limits
+  - per-source-IP and global in-flight request limits
+  - request-body buffering in bounded tmpfs, not persistent proxy storage
   - 100 MiB maximum request body by default
     |
     | private Compose network
@@ -186,7 +187,8 @@ Initial Nginx values are explicit starting defaults, not benchmark-derived produ
 - TLS protocols: TLS 1.2 and TLS 1.3.
 - Maximum body size: `100m` for the whole multipart request. The application allows up to 50 images and 12 MiB per image, so the edge default is intentionally narrower than the theoretical application maximum. Raise it only after memory/disk capacity and abuse testing; do not assume 50 maximum-sized images will fit through this edge policy.
 - The app's `/tmp` tmpfs is capped at 2 GiB. Adjust only after testing decompressed-image working sets and confirming sufficient host memory.
-- Request rate: `1r/s` per source IP with a burst of 2; at most 2 concurrent connections per source IP.
+- Request rate: `1r/s` per source IP with a burst of 2; at most 2 concurrent connections per source IP and 4 in-flight requests globally.
+- Nginx request-body temp storage is a 512 MiB tmpfs, and the application `/tmp` is a separate 2 GiB tmpfs. This avoids persisting buffered raw uploads to the proxy's container filesystem but consumes host memory; keep the global concurrency/body-size limits aligned with available RAM.
 - Upstream connect timeout: 10 seconds; send/read timeouts: 180 seconds.
 - `Cache-Control: no-store` is added to prevent intermediary/browser caching of profile results.
 - Access logs intentionally omit the request URI, query string, headers, and body. Source IP, timestamp, method, status, and response size remain operational metadata.
