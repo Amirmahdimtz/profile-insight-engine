@@ -106,7 +106,7 @@ deploy/tls/fullchain.pem
 deploy/tls/privkey.pem
 ```
 
-Nginx expects a non-passphrase-protected PEM private key at startup; protect it with mode `600` and the host's approved secret-management controls. Confirm the certificate covers the exact configured hostname and is not expired. Compose does not issue or renew certificates; after an approved renewal updates the mounted files, validate and reload Nginx:
+Nginx expects a non-passphrase-protected PEM private key at startup; protect it with mode `600` and the host's approved secret-management controls. The account running preflight must be able to read the key; arrange approved ownership or run preflight as the authorized owner rather than widening group/world permissions. Confirm the certificate covers the exact configured hostname and is not expired. Compose does not issue or renew certificates; after an approved renewal updates the mounted files, validate and reload Nginx:
 
 ```sh
 docker compose exec proxy nginx -t
