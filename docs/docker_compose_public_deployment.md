@@ -66,7 +66,7 @@ These paths are ignored by Git. Compose uses long bind-mount syntax with `create
 - A DNS name pointing to this host.
 - A valid TLS certificate and private key for that DNS name, provisioned by the organization's approved certificate process. Certificate issuance and renewal are intentionally not coupled to Compose because the domain and ACME/provider policy are not known here.
 - A protected operator account for creating and rotating the Basic Auth credentials.
-- Host firewall/security-group rules that permit inbound TCP 80/443 only as intended. Do not publish the app or database ports.
+- Host firewall/security-group rules that permit inbound TCP 80/443 only as intended. Do not publish the app or database ports. Compose binds these ports to IPv4 `0.0.0.0`; do not publish an AAAA record unless IPv6 binding/routing/firewall is separately configured and verified.
 - Enough disk and memory for Python/Tesseract and temporary canonical images. The 100 MiB edge request cap is a conservative initial public-edge policy, not the application's theoretical maximum request size.
 
 The examples below use a Linux shell with OpenSSL and GNU sed on a Docker host. Adapt the file/permission commands for Windows PowerShell or a non-GNU host.
@@ -105,7 +105,7 @@ deploy/tls/fullchain.pem
 deploy/tls/privkey.pem
 ```
 
-Protect the private key according to the host's security policy. Confirm the certificate covers the exact configured hostname and is not expired. Compose does not issue or renew certificates; after an approved renewal updates the mounted files, validate and reload Nginx:
+Nginx expects a non-passphrase-protected PEM private key at startup; protect it with mode `600` and the host's approved secret-management controls. Confirm the certificate covers the exact configured hostname and is not expired. Compose does not issue or renew certificates; after an approved renewal updates the mounted files, validate and reload Nginx:
 
 ```sh
 docker compose exec proxy nginx -t
