@@ -1,3 +1,9 @@
+
+```sh
+chmod 600 .env deploy/secrets/.htpasswd deploy/tls/privkey.pem
+```
+
+The credentials are shared at the reverse-proxy layer and do not provide per-customer authorization or usage accounting.
 # Docker Compose Deployment: Public Internet Edge
 
 This package provides a **single-host, authenticated deployment baseline** for the currently selected `degraded_ocr_only` runtime. It does not enable Vision or Embedding and does not change the application/API contract.
@@ -48,6 +54,7 @@ Operational constraints inherited from the application:
 - `.env.example`: non-secret Compose settings; copy it to the ignored `.env` file.
 - `deploy/nginx/default.conf`: HTTPS redirect, TLS termination, Basic Auth, request limits, conservative logging, and proxy timeouts.
 - `deploy/postgres/init/01-create-app-role.sh`: creates the separate application DB role and grants DML/default-sequence permissions for objects created by the migration/admin role on first database initialization.
+- `deploy/preflight.sh`: fails closed on placeholder credentials/hostname, missing TLS/Auth files, mismatched certificate/key, weak local file permissions, or invalid Compose configuration.
 - `.dockerignore`: excludes local credentials, TLS files, datasets, and development-only content from the image build context.
 
 The following files are intentionally **not** supplied because they are deployment secrets/materials and depend on the operator's actual domain and identity policy:
@@ -118,21 +125,24 @@ The following command runs `htpasswd` in a disposable Apache utility container a
 ```sh
 docker run --rm -it \
   -v "$PWD/deploy/secrets:/out" \
+  --user "$(id -u):$(id -g)" \
   httpd:2.4-alpine \
   htpasswd -B -c /out/.htpasswd 'replace-with-username'
 ```
 
-Replace `replace-with-username` with the intended operator/API username. For each additional user, run the same command without `-c`; `-c` creates/replaces the file and must only be used for the first account. Restrict access to the resulting file. The credentials are shared at the reverse-proxy layer and do not provide per-customer authorization or usage accounting.
+Replace `replace-with-username` with the intended operator/API username. For each additional user, run the same command without `-c`; `-c` creates/replaces the file and must only be used for the first account. Restrict access to the resulting file:
 
 ## 5. Validate and start
 
 Before startup, confirm that the hostname, certificate, private key, `.htpasswd`, and `.env` are real and correct. Then run:
 
 ```sh
-docker compose config --quiet
+sh deploy/preflight.sh
 docker compose build --pull
 docker compose up -d
 ```
+
+The preflight verifies that no placeholder hostname/password remains, the certificate is current and matches the configured hostname/key, sensitive files are not group/world-readable, the Basic Auth file contains a bcrypt entry, and Compose interpolation/configuration succeeds. It does not prove that the external DNS/firewall/certificate chain is correct from the public internet; run the external HTTPS smoke test as well.
 
 The `migrate` service waits for PostgreSQL readiness and runs:
 
