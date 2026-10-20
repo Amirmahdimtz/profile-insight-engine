@@ -2,12 +2,11 @@
 
 Evidence-first profile image analysis service built with FastAPI, PostgreSQL, deterministic image preprocessing, Tesseract OCR, cross-image aggregation, and explainable evidence-backed insights.
 
-> **Accepted baseline:** COMPLETE / PROJECT ACCEPTED / SELF-REPORT EXTENSION VERIFIED at `4dca608041c7a5986b6b0764dd88fb5bf13a454d`  
-> **Current main:** PERSONALITY + COMBINED PROFILE IMPLEMENTED / AWAITING LOCAL VERIFICATION  
-> **Accepted deployment profile:** `degraded_ocr_only`  
-> **Production Vision:** disabled by benchmark evidence  
-> **Production OCR:** Tesseract + `tessdata_best` for Persian/English  
-> **Validated target:** Windows 11, CPU-only, single Uvicorn worker
+> **Current main feature set:** OCR-backed observable insights plus optional consented self-report claims, deterministic Big Five questionnaire scoring, and the additive `combined_profile` response projection.  
+> **Selected runtime profile:** `degraded_ocr_only` — Tesseract + official `tessdata_best` (`fas`, `eng`, `osd`); Vision disabled; embeddings outside the active HTTP workflow.  
+> **Latest reported local verification:** compile/import passed; focused suite 45 passed; PostgreSQL recovery regression 5 passed; full suite 384 passed.  
+> **Phase 10 acceptance caveat:** `scripts/verify_phase10.py` intentionally emits an implementation-only scaffold with `acceptance_ready=false`; this is not a fresh final benchmark report for the current revision.  
+> **Validated target:** Windows 11, CPU-only, single Uvicorn worker.
 
 ---
 
@@ -932,7 +931,19 @@ This verifier checks, among other things:
 
 Important: the verifier's internal acceptance report is intentionally a scaffold with incomplete evidence. Real project acceptance comes from the separately aggregated benchmark evidence.
 
-### Accepted verification baseline
+### Latest reported verification for current main
+
+The latest owner-reported local verification was run against application-code baseline `77464a6ab86af25ac21eaec4f2b95011278f7da9`, before this README-only update:
+
+- compile/import check: passed;
+- focused regression suite: 45 tests passed;
+- PostgreSQL integration/recovery regression: 5 tests passed;
+- full repository regression: 384 tests passed;
+- `scripts/verify_phase10.py`: completed successfully.
+
+**Interpretation matters:** the implementation verifier deliberately writes a fail-closed `phase10_final_benchmark.json` scaffold with `acceptance_ready=false`. This is expected behavior and proves the verifier does not fabricate benchmark acceptance. It does not replace a real, separately aggregated benchmark report for the current source revision.
+
+### Historical target-host verification baseline (not a fresh report for current main)
 
 The final accepted runtime/evidence baseline was verified before the documentation-only closure commit:
 
@@ -952,7 +963,7 @@ The final evidence run was produced against commit:
 01fcf80ade2ffbc701b066281e262d25b1689b11
 ```
 
-Subsequent closure/documentation changes did not change the accepted runtime behavior.
+This is historical evidence for the selected `degraded_ocr_only` runtime at the referenced commit. Current main subsequently added self-report personality scoring and the `combined_profile` API projection. Before claiming full Phase 10 benchmark acceptance for the exact current revision, rerun the real API/E2E benchmark and aggregate its evidence against that revision; the implementation verifier alone is intentionally insufficient.
 
 ---
 
@@ -1045,6 +1056,109 @@ python -m uvicorn `
 ```
 
 Bind to a different interface only according to your organization's network/reverse-proxy/security design.
+
+### Backend/DevOps handoff: runtime topology and hard constraints
+
+The deployment path supported by the current implementation is:
+
+```text
+Trusted client / reverse proxy
+  -> one FastAPI/Uvicorn application instance
+  -> deterministic image validation and temporary preprocessing
+  -> Tesseract OCR (Persian + English)
+  -> cross-image evidence aggregation
+  -> explainable insight generation and privacy sanitization
+  -> PostgreSQL
+```
+
+Operational constraints for this release:
+
+- **Run one application instance with one Uvicorn worker.** Do not run multiple workers or replicas: startup recovery marks unfinished `pending`/`in_progress` records as `failed`, so another process could interfere with work owned by a different process.
+- **The POST operation is synchronous.** There is no task queue, worker service, or automatic retry/resume mechanism. Set client and reverse-proxy timeouts from a real workload test; the historical target-host p95 was about 90 seconds and is not a universal guarantee.
+- **Vision remains disabled** (`vision.enabled: false`). Do not start llama.cpp, provision a GPU, or download a Vision model for this deployment profile.
+- **No embedding service is required** by the active HTTP workflow.
+- The repository does not provide a Dockerfile or Compose deployment manifest. Docker is used by the verification script to run disposable PostgreSQL for tests; this is not a containerized application deployment recipe.
+- The benchmarked platform is Windows 11 / CPU-only. Linux, containers, multi-instance hosting, and alternate hardware need separate operational verification before they can be treated as supported deployment targets.
+
+### Required environment and secret handling
+
+The application reads configuration from `src/host/res/appsettings.yaml` by default. Setting `env_type=development` selects `appsettings.development.yaml`; do not set that value in production.
+
+| Variable | Required | Purpose |
+|---|---:|---|
+| `PROFILE_INSIGHT_DATABASE_URL` | Yes | SQLAlchemy async PostgreSQL URL, starting with `postgresql+asyncpg://` |
+| `PROFILE_INSIGHT_TESSDATA_DIR` | Yes | Directory containing the selected Tesseract traineddata files |
+
+Example PowerShell setup for a local smoke test only:
+
+```powershell
+$env:PROFILE_INSIGHT_DATABASE_URL = "postgresql+asyncpg://USER:PASSWORD@HOST:5432/DATABASE"
+$env:PROFILE_INSIGHT_TESSDATA_DIR = "E:\profile-insight-models\tessdata_best"
+```
+
+Replace the example URL with a real secret-managed value. Do not commit database credentials, place them in appsettings, print them to logs, or paste them into issue reports. URL-encode reserved characters in database credentials as required by SQLAlchemy URL syntax.
+
+The selected OCR directory must contain the official `tessdata_best` files `fas.traineddata`, `eng.traineddata`, and `osd.traineddata`. The active runtime does not require a llama.cpp process, GPU, or pre-downloaded Vision/Embedding checkpoint.
+
+### Database release procedure, backup, and rollback
+
+1. Provision PostgreSQL and a least-privilege application role through the organization's approved database process.
+2. Before schema changes, take a database backup and confirm the restore procedure is documented and tested. The repository does not include a production backup scheduler or restore automation.
+3. Set `PROFILE_INSIGHT_DATABASE_URL` in the process environment/secret manager.
+4. From the repository root, apply and validate migrations once per release:
+
+   ```powershell
+   python -m alembic -c src/infrastructure/alembic.ini upgrade head
+   python -m alembic -c src/infrastructure/alembic.ini check
+   ```
+
+5. If migration or smoke checks fail, stop rollout and restore/roll back using the organization's reviewed database recovery plan. Do not manually patch schema objects or blindly downgrade a production database.
+
+The database stores analysis lifecycle state and sanitized completed results. Raw upload bytes are not stored in PostgreSQL; OCR text is sanitized before persistence. Completed insight text and explicitly supplied self-report fields are still application data and must be covered by access control, retention, and backup policy.
+
+### Process startup, smoke test, restart, and recovery
+
+Start the service from the repository root, with the environment above already supplied by the process manager:
+
+```powershell
+python -m uvicorn src.host.app:app --host 127.0.0.1 --port 5000 --workers 1
+```
+
+Bind to loopback when a reverse proxy runs on the same host. Bind to a private interface only when required by the network design and protected by firewall/security-group rules.
+
+In a separate shell, verify basic HTTP startup:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/openapi.json |
+  Select-Object -ExpandProperty info
+```
+
+Then perform a controlled POST/status/result smoke test using the API examples above and a non-sensitive test image. Use a unique `analysis_id` for every test: IDs cannot be reused, and the current API has no DELETE endpoint.
+
+On startup, the application removes stale temporary image-processing scopes and marks unfinished `pending`/`in_progress` analyses as `failed`; it does not resume interrupted work. A restart may therefore make interrupted analyses fail by design. After a restart, repeat the OpenAPI check and confirm PostgreSQL and Tesseract are reachable.
+
+The application currently has no dedicated `/health` or `/ready` endpoint. `/openapi.json` is a basic HTTP liveness probe, not proof that PostgreSQL and OCR are ready. Do not build readiness monitoring around a route that does not exist; use infrastructure-level database/process checks and a controlled end-to-end smoke test.
+
+### Security boundary before exposing traffic
+
+The current application code does not configure API authentication/authorization, TLS termination, rate limiting, or a CORS policy. Do **not** expose the Uvicorn listener directly to the public Internet. Before accepting untrusted traffic, the deployment must provide an approved network boundary and reverse-proxy/API-gateway controls, including TLS, caller authentication/authorization, request-size/time limits, rate limiting, and appropriate access logging. Consider restricting `/docs` and `/openapi.json` to trusted networks in production.
+
+Keep operational logs free of raw image bytes, raw OCR text, raw provider payloads, and credentials. Monitor process availability, request latency/failures, PostgreSQL health, available disk space for temporary files, and Tesseract/traineddata availability. The repository does not provide a production metrics dashboard or a dedicated health endpoint, so monitoring integration remains a deployment responsibility.
+
+### Current-revision release gate
+
+Before calling the exact deployed revision fully benchmark-accepted:
+
+- [ ] run compile/import and the full test suite on the release commit;
+- [ ] run `python scripts/verify_phase10.py` and confirm it passes its implementation checks;
+- [ ] separately run the real selected-profile API/E2E benchmark with the authorized dataset and correct fingerprints;
+- [ ] aggregate the real reports with `python -m evaluation.phase10_benchmark`;
+- [ ] review the resulting report and its `acceptance_ready` / `missing_evidence` fields; do not substitute the verifier's scaffold report;
+- [ ] record the exact source commit, dataset fingerprints, hardware profile, and report artifact location;
+- [ ] confirm the single-instance topology, security boundary, backup/restore, and rollback plan.
+
+Generated benchmark reports can contain dataset and operational metadata. Store them in the approved evidence/artifact location and do not commit authorized images or sensitive dataset content to source control.
+
 
 ---
 
