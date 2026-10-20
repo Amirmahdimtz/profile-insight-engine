@@ -6,6 +6,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 COMPOSE_PATH = ROOT / "compose.yaml"
+DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 DOCKERFILE_PATH = ROOT / "Dockerfile"
 NGINX_PATH = ROOT / "deploy/nginx/default.conf"
 PREFLIGHT_PATH = ROOT / "deploy/preflight.sh"
@@ -16,10 +17,16 @@ class DockerComposeDeploymentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+        cls.dockerignore = DOCKERIGNORE_PATH.read_text(encoding="utf-8")
         cls.dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
         cls.nginx = NGINX_PATH.read_text(encoding="utf-8")
         cls.preflight = PREFLIGHT_PATH.read_text(encoding="utf-8")
         cls.docs = DEPLOYMENT_DOC_PATH.read_text(encoding="utf-8")
+
+    def test_build_context_whitelists_only_runtime_inputs(self):
+        self.assertEqual(
+            self.dockerignore.splitlines(), ["*", "!requirements.txt", "!src/", "!src/**"]
+        )
 
     def test_only_reverse_proxy_publishes_public_ports(self):
         services = self.compose["services"]
