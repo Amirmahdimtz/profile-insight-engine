@@ -93,8 +93,16 @@ class PersonalityContractTests(unittest.TestCase):
             "outside the declared scale",
         ):
             responses = list(_questionnaire().responses)
-            responses[0] = PersonalityQuestionnaireItemResponse(
-                "o-1", BigFiveTrait.OPENNESS, 6
+            invalid_item_index = next(
+                index
+                for index, item in enumerate(responses)
+                if item.item_id == "o-1"
+            )
+            invalid_item = responses[invalid_item_index]
+            responses[invalid_item_index] = PersonalityQuestionnaireItemResponse(
+                invalid_item.item_id,
+                invalid_item.trait,
+                6,
             )
             PersonalityQuestionnaire(
                 instrument_id="instrument",
