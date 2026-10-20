@@ -41,6 +41,7 @@ Operational constraints inherited from the application:
 - `vision.enabled` remains `false`. No llama.cpp server, GPU, or Embedding service is part of this image/runtime.
 - `/openapi.json` is only a basic liveness probe. The application has no dedicated health/readiness endpoint, and this probe does not prove PostgreSQL/OCR readiness.
 - The API has no application-level authentication/authorization or CORS policy. Basic Auth at Nginx is a shared access gate, **not** a full user identity, per-user authorization, or quota system.
+- Database connection credentials are passed to containers as environment variables because the current application contract consumes `PROFILE_INSIGHT_DATABASE_URL`. A Docker daemon administrator can inspect container environments; restrict daemon/socket access and use an approved secret-management integration if the threat model requires a different boundary.
 
 ## 2. Files in this package
 
@@ -68,7 +69,7 @@ These paths are ignored by Git. Compose uses long bind-mount syntax with `create
 - A valid TLS certificate and private key for that DNS name, provisioned by the organization's approved certificate process. Certificate issuance and renewal are intentionally not coupled to Compose because the domain and ACME/provider policy are not known here.
 - A protected operator account for creating and rotating the Basic Auth credentials.
 - Host firewall/security-group rules that permit inbound TCP 80/443 only as intended. Do not publish the app or database ports. Compose binds these ports to IPv4 `0.0.0.0`; do not publish an AAAA record unless IPv6 binding/routing/firewall is separately configured and verified.
-- Enough disk and memory for Python/Tesseract and temporary canonical images. The 100 MiB edge request cap is a conservative initial public-edge policy, not the application's theoretical maximum request size.
+- Enough disk and memory for Python/Tesseract and temporary canonical images. The 100 MiB edge request cap is a conservative initial public-edge policy, not the application's theoretical maximum request size. Apply the organization's at-rest encryption and swap policy to the host, persistent database volume, and backups; tmpfs can use host swap depending on OS configuration.
 
 The examples below use a Linux shell with OpenSSL and GNU sed on a Docker host. Adapt the file/permission commands for Windows PowerShell or a non-GNU host.
 
@@ -195,7 +196,7 @@ Initial Nginx values are explicit starting defaults, not benchmark-derived produ
 - Maximum body size: `100m` for the whole multipart request. The application allows up to 50 images and 12 MiB per image, so the edge default is intentionally narrower than the theoretical application maximum. Raise it only after memory/disk capacity and abuse testing; do not assume 50 maximum-sized images will fit through this edge policy.
 - The app's `/tmp` tmpfs is capped at 2 GiB. Adjust only after testing decompressed-image working sets and confirming sufficient host memory.
 - Request rate: `1r/s` per source IP with a burst of 2; at most 1 concurrent request per source IP and 1 in-flight request globally. The global cap is deliberately conservative for the current single-worker synchronous API; rejected concurrent requests receive `429` and must be retried by the client after the active request finishes.
-- Nginx request-body temp storage is a 256 MiB tmpfs, and the application `/tmp` is a separate 2 GiB tmpfs. This avoids persisting buffered raw uploads to the proxy's container filesystem but consumes host memory; keep the global concurrency/body-size limits aligned with available RAM.
+- Nginx request-body temp storage is a 256 MiB tmpfs, and the application `/tmp` is a separate 2 GiB tmpfs. This avoids persisting buffered raw uploads to the proxy's container filesystem but consumes host memory; keep the global concurrency/body-size limits aligned with available RAM. tmpfs pages may still be swapped by the host OS, so follow the host's encrypted/disabled-swap policy for this data sensitivity.
 - Upstream connect timeout: 10 seconds; send/read timeouts: 180 seconds.
 - `Cache-Control: no-store` is added to prevent intermediary/browser caching of profile results.
 - Access logs intentionally omit the request URI, query string, headers, and body. Source IP, timestamp, method, status, and response size remain operational metadata.
@@ -262,7 +263,8 @@ Do not treat the stack as production-ready until all applicable gates are satisf
 - [ ] Firewall/security group exposes only intended public ports; app and DB remain private.
 - [ ] Basic Auth is acceptable for the intended audience, or is replaced by an approved identity/API gateway with per-user authorization and quotas. Do not offer an anonymous public API with the current app.
 - [ ] Request limits and timeouts are load/abuse-tested against representative non-sensitive data.
-- [ ] Backup and restore are tested; monitoring/alerting and disk-space monitoring are operational.
+- [ ] Backup and restore are tested; persistent database storage and backups follow the required at-rest encryption policy; monitoring/alerting and disk-space monitoring are operational.
+- [ ] Access to the Docker daemon/socket is restricted to trusted administrators because container environment variables include database credentials.
 - [ ] Container build, full tests, migration checks, authenticated POST/status/result smoke tests, and the real current-revision API/E2E benchmark pass on the target host.
 - [ ] Privacy/retention rules cover persisted completed results and explicitly self-reported fields; there is no DELETE endpoint in the current API.
 
