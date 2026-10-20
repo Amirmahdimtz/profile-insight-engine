@@ -1,9 +1,3 @@
-
-```sh
-chmod 600 .env deploy/secrets/.htpasswd deploy/tls/privkey.pem
-```
-
-The credentials are shared at the reverse-proxy layer and do not provide per-customer authorization or usage accounting.
 # Docker Compose Deployment: Public Internet Edge
 
 This package provides a **single-host, authenticated deployment baseline** for the currently selected `degraded_ocr_only` runtime. It does not enable Vision or Embedding and does not change the application/API contract.
@@ -131,6 +125,12 @@ docker run --rm -it \
 ```
 
 Replace `replace-with-username` with the intended operator/API username. For each additional user, run the same command without `-c`; `-c` creates/replaces the file and must only be used for the first account. Restrict access to the resulting file:
+
+```sh
+chmod 600 .env deploy/secrets/.htpasswd deploy/tls/privkey.pem
+```
+
+The credentials are shared at the reverse-proxy layer and do not provide per-customer authorization or usage accounting.
 
 ## 5. Validate and start
 
