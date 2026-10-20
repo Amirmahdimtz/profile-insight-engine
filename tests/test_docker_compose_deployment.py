@@ -77,6 +77,7 @@ class DockerComposeDeploymentTests(unittest.TestCase):
             "limit_conn api_conn_per_ip",
             "client_max_body_size 100m",
             "proxy_pass http://app:8000",
+            'proxy_set_header Authorization "";',
             "if ($host != example.com) { return 444; }",
             'add_header Cache-Control "no-store" always',
         ):
