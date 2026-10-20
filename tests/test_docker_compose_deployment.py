@@ -80,6 +80,8 @@ class DockerComposeDeploymentTests(unittest.TestCase):
         for fragment in (
             "POSTGRES_PASSWORD must be 64 lowercase hex characters",
             "APP_DB_PASSWORD must be 64 lowercase hex characters",
+            "bootstrap/admin and application DB passwords must differ",
+            "HTTP redirect hostname must match server_name",
             "openssl x509 -in deploy/tls/fullchain.pem -noout -checkhost",
             "TLS certificate and private key do not match",
             "must not be readable by group/other",
