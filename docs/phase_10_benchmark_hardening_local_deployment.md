@@ -92,7 +92,7 @@ Existing privacy boundaries remain: raw upload bytes are not persisted; canonica
 
 The selected deployment topology is a local FastAPI process, PostgreSQL and Tesseract OCR with Vision explicitly disabled by configuration. The rejected llama.cpp and Transformers Vision adapters remain in Infrastructure for benchmark/history and future reevaluation but are not required to run the selected production profile. The separately benchmarked Embedding runtime is not in the active HTTP workflow. Core/Application do not depend on GGUF, Safetensors, PyTorch, Outlines or ONNX details.
 
-No new application Docker/Compose topology is introduced because the selected target remains a local Windows workstation running the API directly. The degraded production profile has no llama.cpp runtime dependency. Docker is used only for reproducible PostgreSQL verification.
+The Phase 10 benchmark evidence was collected on a local Windows workstation running the API directly; it does not validate Docker/Linux deployment. The repository now also includes a single-host Docker Compose deployment baseline in `docs/docker_compose_public_deployment.md`. The degraded production profile has no llama.cpp runtime dependency. Docker is used by the new package for the application container and by the verification scripts for disposable PostgreSQL; container acceptance remains pending until the documented local checks and current-revision E2E benchmark pass.
 
 ## Operational runbook
 
