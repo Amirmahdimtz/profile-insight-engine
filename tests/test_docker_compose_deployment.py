@@ -8,6 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 COMPOSE_PATH = ROOT / "compose.yaml"
 DOCKERFILE_PATH = ROOT / "Dockerfile"
 NGINX_PATH = ROOT / "deploy/nginx/default.conf"
+PREFLIGHT_PATH = ROOT / "deploy/preflight.sh"
 DEPLOYMENT_DOC_PATH = ROOT / "docs/docker_compose_public_deployment.md"
 
 
@@ -17,6 +18,7 @@ class DockerComposeDeploymentTests(unittest.TestCase):
         cls.compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
         cls.dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
         cls.nginx = NGINX_PATH.read_text(encoding="utf-8")
+        cls.preflight = PREFLIGHT_PATH.read_text(encoding="utf-8")
         cls.docs = DEPLOYMENT_DOC_PATH.read_text(encoding="utf-8")
 
     def test_only_reverse_proxy_publishes_public_ports(self):
@@ -73,6 +75,18 @@ class DockerComposeDeploymentTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, self.nginx)
         self.assertNotIn("$request_uri", self.nginx.split("log_format privacy_safe", 1)[1].split(";", 1)[0])
+
+    def test_preflight_rejects_placeholder_secrets_and_validates_tls_and_compose(self):
+        for fragment in (
+            "POSTGRES_PASSWORD must be 64 lowercase hex characters",
+            "APP_DB_PASSWORD must be 64 lowercase hex characters",
+            "openssl x509 -in deploy/tls/fullchain.pem -noout -checkhost",
+            "TLS certificate and private key do not match",
+            "must not be readable by group/other",
+            "docker compose config --quiet",
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, self.preflight)
 
     def test_documentation_calls_out_unverified_container_target_and_public_auth_boundary(self):
         for fragment in (
