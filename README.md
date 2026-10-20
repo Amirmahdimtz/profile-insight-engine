@@ -1049,7 +1049,11 @@ Before serving traffic:
 
 The repository includes a single-host Compose stack with Nginx as the only public entry point. It publishes ports 80/443, keeps the API and PostgreSQL un-published on an internal network, runs migrations before API startup, and uses edge Basic Auth plus TLS. The certificate and `.htpasswd` file must be supplied by the operator. Basic Auth is only a shared gate, not application-level per-user authorization; do not expose this API anonymously. Container/Linux behavior still requires target-host verification. See [`docs/docker_compose_public_deployment.md`](docs/docker_compose_public_deployment.md).
 
-Recommended production command for the accepted topology:
+### Direct-host command for the historically validated topology
+
+The following command runs Uvicorn directly on the host, not inside Docker. It remains the historically benchmarked setup and is separate from the new Docker Compose public-edge package.
+
+Command:
 
 ```powershell
 python -m uvicorn `
