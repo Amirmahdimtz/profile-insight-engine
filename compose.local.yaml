@@ -1,0 +1,6 @@
+# Windows Docker Desktop verification only. Do not use as the public deployment edge.
+# Run only db, migrate and app; the production Nginx proxy must not start here.
+services:
+  app:
+    ports:
+      - "127.0.0.1:5000:8000"
