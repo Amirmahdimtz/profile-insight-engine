@@ -899,6 +899,26 @@ without redesigning and revalidating startup/recovery ownership.
 
 ## Testing and verification
 
+### Docker Desktop end-to-end smoke (Windows)
+
+If `profile-insight-engine:local` has already been built, run this
+**without rebuilding** from the repository root in PowerShell:
+
+```powershell
+git switch main
+git pull --ff-only
+powershell -ExecutionPolicy Bypass -File .\\scripts\\verify_docker_local.ps1
+```
+
+This starts an isolated PostgreSQL/migration/API stack, generates ignored local
+database secrets, binds HTTP to `127.0.0.1:5000` only, and exercises
+POST/status/result with synthetic images. **No domain, TLS, public proxy, or
+real personal images are needed.** The current OCR-only production profile
+does not run a VLM. Read
+[Windows Docker Desktop smoke and DevOps handoff](docs/windows_docker_desktop_smoke.md)
+for expected results, diagnostics, stopping and production caveats.
+
+
 ### Full regression suite
 
 ```powershell
