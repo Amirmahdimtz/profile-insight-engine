@@ -11,6 +11,8 @@ DOCKERFILE_PATH = ROOT / "Dockerfile"
 NGINX_PATH = ROOT / "deploy/nginx/default.conf"
 PREFLIGHT_PATH = ROOT / "deploy/preflight.sh"
 DEPLOYMENT_DOC_PATH = ROOT / "docs/docker_compose_public_deployment.md"
+LOCAL_COMPOSE_PATH = ROOT / "compose.local.yaml"
+LOCAL_SCRIPT_PATH = ROOT / "scripts/verify_docker_local.ps1"
 
 
 class DockerComposeDeploymentTests(unittest.TestCase):
@@ -22,6 +24,8 @@ class DockerComposeDeploymentTests(unittest.TestCase):
         cls.nginx = NGINX_PATH.read_text(encoding="utf-8")
         cls.preflight = PREFLIGHT_PATH.read_text(encoding="utf-8")
         cls.docs = DEPLOYMENT_DOC_PATH.read_text(encoding="utf-8")
+        cls.local_compose = yaml.safe_load(LOCAL_COMPOSE_PATH.read_text(encoding="utf-8"))
+        cls.local_script = LOCAL_SCRIPT_PATH.read_text(encoding="utf-8")
 
     def test_build_context_whitelists_only_runtime_inputs(self):
         self.assertEqual(
@@ -102,6 +106,38 @@ class DockerComposeDeploymentTests(unittest.TestCase):
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, self.preflight)
+
+
+    def test_windows_local_override_is_loopback_only_and_preserves_production_edge(self):
+        self.assertEqual(set(self.local_compose["services"]), {"app"})
+        app = self.local_compose["services"]["app"]
+        self.assertEqual(app["ports"], ["127.0.0.1:5000:8000"])
+        self.assertEqual(app["networks"], ["backend", "frontend"])
+        self.assertNotIn("ports", self.compose["services"]["app"])
+        self.assertNotIn("ports", self.compose["services"]["db"])
+
+    def test_windows_local_smoke_uses_isolated_secrets_and_real_http_persistence(self):
+        script = self.local_script
+        for fragment in (
+            '"profile-insight-local"',
+            '".env.local"',
+            'RandomNumberGenerator',
+            '"--no-build"',
+            '"db", "migrate", "app"',
+            '"src/infrastructure/alembic.ini", "check"',
+            'http://127.0.0.1:5000/openapi.json',
+            '"/api/v1/profile_analysis/"',
+            '"/api/v1/profile_analysis/{analysis_id}/result"',
+            "synthetic_png",
+            'created.get("status") != "completed"',
+            'len(body.get("images", [])) != 2',
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, script)
+        for forbidden in ('"proxy"', '"down", "-v"', '"0.0.0.0:5000:8000"'):
+            self.assertNotIn(forbidden, script)
+        gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("/.env.*", gitignore)
 
     def test_documentation_calls_out_unverified_container_target_and_public_auth_boundary(self):
         for fragment in (
