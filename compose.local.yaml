@@ -2,5 +2,10 @@
 # Run only db, migrate and app; the production Nginx proxy must not start here.
 services:
   app:
+    # The private backend is retained for PostgreSQL; frontend enables the
+    # loopback-published host port without weakening the production backend.
+    networks:
+      - backend
+      - frontend
     ports:
       - "127.0.0.1:5000:8000"
