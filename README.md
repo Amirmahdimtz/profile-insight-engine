@@ -907,7 +907,7 @@ If `profile-insight-engine:local` has already been built, run this
 ```powershell
 git switch main
 git pull --ff-only
-powershell -ExecutionPolicy Bypass -File .\\scripts\\verify_docker_local.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\verify_docker_local.ps1
 ```
 
 This starts an isolated PostgreSQL/migration/API stack, generates ignored local
